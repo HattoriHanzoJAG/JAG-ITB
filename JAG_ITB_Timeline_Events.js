@@ -10,7 +10,7 @@
 
 (function() {
 
-    const DEBUG_EVENTS = false;
+    const DEBUG_EVENTS = true;
 
     //--------------------------------------------------------------------------
     // Notetag parser
@@ -159,7 +159,7 @@
         //if (!action._ctbActionId) action._ctbActionId = BattleManager._nextCTBActionId++;
         const item = action.item();
         if (!item || !item.selfState) return;
-        var skillId = item.id : 0;
+        var skillId = item.id;
         this._ITBEvents = this._ITBEvents.filter(function(event) {
             return event.skillId === skillId;
         });
@@ -202,6 +202,11 @@
                 console.log("Battler:", this.name());
                 console.log("State initiative:", initiative + item.selfState.offset);
                 console.log("Battler initiative:", initiative);
+                console.log(
+                    "SELFSTATE",
+                    item ? item.name : null,
+                    item ? item.selfState : null
+                );
             }
         }
     };
@@ -336,21 +341,19 @@
         // Preview selfstate
         var action = battler.ctbActionPreview();
         if (!action || !action.item() || !action.item().selfState) return;
-        if (battler.currentAction() && action === battler.currentAction()) action = null;
-        var selfState = action.item().selfState;
-        if (selfState.offset > 0) {
-            var previewInitiative = battler.ctbPreviewInitiative() + selfState.offset;
-            previews.forEach(function(preview) {
-                entries.push({
-                    type: "statePreview",
-                    battler: battler,
-                    stateId: selfState.stateId,
-                    initiative: previewInitiative,
-                    activationOrder: battler._activationOrder || 0,
-                    preview: true
-                });
+        if (battler.currentAction() && action === battler.currentAction()) return;
+        var selfState = battler.previewSelfState();
+        if (!selfState) return;
+        previews.forEach(function(preview) {
+            entries.push({
+                type: "statePreview",
+                battler: battler,
+                stateId: selfState.stateId,
+                initiative: selfState.initiative,
+                activationOrder: battler._activationOrder || 0,
+                preview: true
             });
-        }
+        });
         // Scheduled selfstates
         battler._ITBEvents.forEach(function(event) {
             entries.push({
@@ -379,6 +382,43 @@
         slot.x = this.slotX(entry.initiative);
         slot.y = this.slotY(entry.initiative);
         return slot;
+    };
+
+    var TE_WCTBAI_updateRedraw = Window_CTBActionIcon.prototype.updateRedraw;
+    Window_CTBActionIcon.prototype.updateRedraw = function() {
+        TE_WCTBAI_updateRedraw.call(this);
+        this.drawPreviewSelfState();
+    };
+
+    Window_CTBActionIcon.prototype.drawPreviewSelfState = function() {
+        if (!this._battler) return;
+        var selfState = this._battler.previewSelfState();
+        if (!selfState) return;
+        var state = $dataStates[selfState.stateId];
+        if (!state) return;
+        var iconIndex = state.iconIndex;
+        if (!iconIndex) return;
+        // temporary position for testing
+        var x = 38;
+        var y = 20;
+        if (this._battler.isCTBPreviewBlinking()) {
+            this.contents.paintOpacity = this._blinkOpacity;
+        }
+        this.drawActionBorderAt(x - 3, y - 3, "#66CCFF");
+        this.drawActionIcon(iconIndex, x, y);
+        this.contents.paintOpacity = 255;
+    };
+
+    Game_Battler.prototype.previewSelfState = function() {
+        var action = this.ctbActionPreview();
+        if (!action) return null;
+        var item = action.item();
+        if (!item || !item.selfState) return null;
+        var data = action.item().selfState;
+        return {
+            stateId: data.stateId,
+            initiative: this.ctbPreviewInitiative() + data.offset
+        };
     };
     
 })();

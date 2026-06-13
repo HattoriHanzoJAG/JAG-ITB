@@ -1011,6 +1011,15 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
 
     Window_CTBTimeline.prototype.drawTrackSlot = function(x, y, width, height, value, i) {
+        if (
+            this._timelineSlots &&
+            this._timelineSlots[i] &&
+            this._timelineSlots[i].type === "statePreview"
+        ) {
+            this.contents.textColor = "#00FF00";
+            this.drawText("S", x, y - 14, width, "center");
+            this.resetTextColor();
+        }
         this.contents.fillRect(
             x,
             y,
@@ -1122,12 +1131,12 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         while (slots.length < this.slotCount()) {
             if (grouped[visibleInitiative]) {
                 grouped[visibleInitiative].forEach(function(entry) {
-                    slots.push({
-                        initiative: entry.initiative,
-                        battler: entry.battler,
-                        action: entry.action || null,
-                        type: entry.type
-                    });
+                    var slot = {};
+                    for (var key in entry) slot[key] = entry[key];
+                    //slot.initiative = entry.initiative;
+                    //slot.battler = entry.battler || null;
+                    slot.action = entry.action || null;
+                    slots.push(slot);
                 });
             } else {
                 slots.push({
@@ -1274,7 +1283,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                     activationOrder: battler._activationOrder || 0
                 });
             }
-            this.addTimelineExtensionEntries(entries, battler);
+            BattleManager.addTimelineExtensionEntries(entries, battler);
             if (DEBUG_Timeline && showlog) {
                 console.log(
                     battler.ctbActionPreview(),
