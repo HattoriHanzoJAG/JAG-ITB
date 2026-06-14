@@ -193,7 +193,7 @@
             } else { */
             if (DEBUG_EVENTS) console.log("New event scheduled:", item.selfState.stateId);
             this._ITBEvents.push({
-                actionId: action.item.Id,
+                skillId: item.Id,
                 stateId: item.selfState.stateId,
                 triggerInitiative: initiative + item.selfState.offset
             });
@@ -382,6 +382,20 @@
         });
     };
 
+    /* var TE_WCTBT_buildSlots = Window_CTBTimeline.prototype.buildTimelineSlots;
+    Window_CTBTimeline.prototype.buildTimelineSlots = function() {
+        TE_WCTBT_buildSlots.call(this);
+        // After base slots exist, enrich them safely
+        if (!this._timelineSlots) return;
+        this._timelineSlots.forEach(function(slot) {
+            if (!slot || slot.type !== "statePreview") return;
+            // ensure consistent structure (important!)
+            slot.stateId = slot.stateId || 0;
+            slot.preview = true;
+            slot.event = "selfState";
+        });
+    }; */
+
     Window_CTBTimeline.prototype.drawStatePreviewEntry = function(entry) {
         var state = $dataStates[entry.stateId];
         if (!state) return;
@@ -397,46 +411,102 @@
         return slot;
     };
 
+    /* var TE_WCTBT_drawTrackSlot = Window_CTBTimeline.prototype.drawTrackSlot;
+    Window_CTBTimeline.prototype.drawTrackSlot = function(x, y, width, height, value, i) {
+        TE_WCTBT_drawTrackSlot.call(this, x, y, width, height, value, i);
+        if (!this._timelineSlots) return;
+        var slot = this._timelineSlots[i];
+        if (!slot) return;
+        if (slot.type === "statePreview") {
+            var state = $dataStates[slot.stateId];
+            if (state && state.iconIndex) {
+                //console.log("DRAW STATE ICON", state.name);
+                this.drawIcon(
+                    state.iconIndex,
+                    x + width / 2 - 16,
+                    y - 18
+                );
+            }
+        }
+    } */
+
+    var _CTBAI_init = Window_CTBActionIcon.prototype.initialize;
+    Window_CTBActionIcon.prototype.initialize = function() {
+        _CTBAI_init.call(this);
+        this.createStatePreviewWindow();
+    };
+
+    Window_CTBActionIcon.prototype.createStatePreviewWindow = function() {
+        this._statePreviewWindow = new Window_CTBActionIconStatePreview(this);
+        this.addChild(this._statePreviewWindow);
+    };
+
+    Window_CTBActionIcon.prototype.drawPreviewSelfState = function() {
+        //console.log("DRAW PREVIEW SELFSTATE");
+        if (!this._battler) return;
+        var selfState = this._battler.previewSelfState();
+        if (!selfState) return;
+        //console.log("Selfstate:", selfState);
+        var state = $dataStates[selfState.stateId];
+        if (!state) return;
+        //console.log("State:", state);
+        var iconIndex = state.iconIndex;
+        if (!iconIndex) return;
+        //console.log("Icon index:", iconIndex);
+        var timeline = BattleManager.timelineWindow();
+        if (!timeline) return;
+        // Action slot position (anchor)
+        var actionInit = this._battler.ctbPreviewInitiative();
+        //console.log("Action Init:", actionInit);
+        if (!actionInit) return;
+        // Selfstate slot position
+        var stateInit = selfState.initiative;
+        //console.log("State Init:", stateInit);
+        // convert into timeline space
+        var actionX = timeline.initiativeToX(actionInit);
+        var stateX = timeline.initiativeToX(stateInit);
+        //console.log("Initiative:", initiative);
+        // Relative offset inside action icon window
+        var x = stateX - actionX; //timeline.initiativeToX(initiative);
+        var y = 20;
+        if (this._battler.isCTBPreviewBlinking()) {
+            this.contents.paintOpacity = this._blinkOpacity;
+        }
+        /* console.log(
+            "Window X:",
+            this.x,
+            "Timeline X:",
+            x,
+            "Contents Width:",
+            this.contentsWidth()
+        ); */
+        //console.log("X-coordinate:", x);
+        this.drawActionBorderAt(x - 3, y - 3, "#66CCFF");
+        this.drawActionIcon(iconIndex, x, y);
+        this.contents.paintOpacity = 255;
+    };
+
     var TE_WCTBAI_updateRedraw = Window_CTBActionIcon.prototype.updateRedraw;
     Window_CTBActionIcon.prototype.updateRedraw = function() {
         TE_WCTBAI_updateRedraw.call(this);
         this.drawPreviewSelfState();
     };
 
-    Window_CTBActionIcon.prototype.drawPreviewSelfState = function() {
-        if (!this._battler) return;
-        var selfState = this._battler.previewSelfState();
-        if (!selfState) return;
-        var state = $dataStates[selfState.stateId];
-        if (!state) return;
-        var iconIndex = state.iconIndex;
-        if (!iconIndex) return;
-        // temporary position for testing
-        var x = 38;
-        var y = 20;
-        if (this._battler.isCTBPreviewBlinking()) {
-            this.contents.paintOpacity = this._blinkOpacity;
-        }
-        this.drawActionBorderAt(x - 3, y - 3, "#66CCFF");
-        this.drawActionIcon(iconIndex, x, y);
-        this.contents.paintOpacity = 255;
-    };
-
-    var TE_CTBAI_updateRedraw = Window_CTBActionIcon.prototype.updateRedraw;
+    /* var TE_WCTBAI_updateRedraw = Window_CTBActionIcon.prototype.updateRedraw;
     Window_CTBActionIcon.prototype.updateRedraw = function() {
         if (this._timelineEntryType !== "statePreview") {
-            TE_CTBAI_updateRedraw.call(this);
+            TE_WCTBAI_updateRedraw.call(this);
             return;
         }
         this.contents.clear();
         this.drawActionBorder();
         this.drawActionIcon(this._iconIndex, 2, 20);
-    };
+    }; */
 
-    var TE_CTBAI_updateActionIcon = Window_CTBActionIcon.prototype.updateActionIcon;
+    var TE_WCTBAI_updateActionIcon = Window_CTBActionIcon.prototype.updateActionIcon;
     Window_CTBActionIcon.prototype.updateActionIcon = function() {
         if (this._timelineEntryType !== "statePreview") {
-            TE_CTBAI_updateActionIcon.call(this);
+            TE_WCTBAI_updateActionIcon.call(this);
             return;
         }
         var preview = this._battler.previewSelfState();
@@ -446,12 +516,13 @@
             var state = $dataStates[preview.stateId];
             this._iconIndex = state ? state.iconIndex : 0;
         }
+        console.log("STATE ICON UPDATE");
     };
 
-    var TE_CTBAI_updatePosition = Window_CTBActionIcon.prototype.updatePosition;
+    var TE_WCTBAI_updatePosition = Window_CTBActionIcon.prototype.updatePosition;
     Window_CTBActionIcon.prototype.updatePosition = function() {
         if (this._timelineEntryType !== "statePreview") {
-            TE_CTBAI_updatePosition.call(this);
+            TE_WCTBAI_updatePosition.call(this);
             return;
         }
         var preview = this._battler.previewSelfState();
@@ -466,6 +537,59 @@
         this.y = this._mainSprite._ctbIcon.y;
     };
 
+    function Window_CTBActionIconStatePreview(parent) {
+        this.initialize.apply(this, arguments);
+    };
+
+    Window_CTBActionIconStatePreview.prototype = Object.create(Window_CTBActionIcon.prototype);
+    Window_CTBActionIconStatePreview.prototype.constructor = Window_CTBActionIconStatePreview;
+
+    Window_CTBActionIconStatePreview.prototype.initialize = function(parent) {
+        this._parent = parent;
+        Window_CTBActionIcon.prototype.initialize.call(this, parent);
+        this.opacity = 0;
+        this.contentsOpacity = 255;
+    };
+
+    Window_CTBActionIconStatePreview.prototype.updatePosition = function() {
+        var battler = this._parent._battler;
+        if (!battler) return;
+        var selfState = battler.previewSelfState();
+        if (!selfState) {
+            this.visible = false;
+            return;
+        }
+        var timeline = BattleManager.timelineWindow();
+        if (!timeline) return;
+        var actionInit = battler.ctbPreviewInitiative();
+        var stateInit = selfState.initiative;
+        var actionX = timeline.initiativeToX(actionInit);
+        var stateX  = timeline.initiativeToX(stateInit);
+        this.x = stateX - actionX;
+        this.y = 0; // same baseline as action icon window
+        this.visible = true;
+    };
+
+    Window_CTBActionIconStatePreview.prototype.update = function() {
+        Window_Base.prototype.update.call(this);
+        this.updatePosition();
+        this.refresh();
+    };
+
+    Window_CTBActionIconStatePreview.prototype.refresh = function() {
+        this.contents.clear();
+        var battler = this._parent._battler;
+        if (!battler) return;
+        var selfState = battler.previewSelfState();
+        if (!selfState) return;
+        var state = $dataStates[selfState.stateId];
+        if (!state) return;
+        var iconIndex = state.iconIndex;
+        if (!iconIndex) return;
+        this.drawActionBorderAt(0, 0, "#66CCFF");
+        this.drawIcon(iconIndex, 4, 4);
+    };
+
     Game_Battler.prototype.previewSelfState = function() {
         var action = this.ctbActionPreview();
         if (!action) return null;
@@ -478,11 +602,12 @@
         };
     };
 
-    var TE_SB_addCTBIcon = Sprite_Battler.prototype.addCTBIcon;
+    /* var TE_SB_addCTBIcon = Sprite_Battler.prototype.addCTBIcon;
     Sprite_Battler.prototype.addCTBIcon = function() {
         TE_SB_addCTBIcon.call(this);
         this._ctbStatePreviewIcon = new Window_CTBActionIcon(this);
         this._ctbStatePreviewIcon._timelineEntryType = "statePreview";
-    };
+        //console.log("ADD STATE ICON");
+    } */;
     
 })();

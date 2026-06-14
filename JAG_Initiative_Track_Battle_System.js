@@ -25,7 +25,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 (function() {
 
     const DEBUG_ITB = false;
-    const DEBUG_Timeline = false;
+    const DEBUG_Timeline = true;
 
     var _DataManager_isDatabaseLoaded = DataManager.isDatabaseLoaded;
     DataManager.isDatabaseLoaded = function() {
@@ -594,6 +594,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     // Update this for actions
     Window_CTBActionIcon.prototype.updateBattler = function() {
+        if (!this._mainSprite) return;
         this._battler = this._mainSprite._battler;
     };
 
@@ -642,11 +643,14 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         if (!this._redraw) return;
         this._redraw = false;
         if (DEBUG_Timeline) {
-            console.log(
-                "ICON UPDATE",
-                this._battler.name(),
-                this._battler.isActor()
-            );
+            if (this._lastbattler !== this._battler) {
+                this._lastbattler = this._battler;
+                console.log(
+                    "ICON UPDATE",
+                    this._battler.name(),
+                    this._battler.isActor()
+                );
+            }
         }
         this.contents.clear();
         if (this._iconIndex <= 0) {
@@ -659,7 +663,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this.drawActionBorder();
         this.drawActionIcon(this._iconIndex, 2, 20);
         if (this._previewState) {
-            if (DEBUG_Timeline) console.log("Draw preview arrow");
+            //if (DEBUG_Timeline) console.log("Draw preview arrow");
             this.drawPreviewArrow();
         }
         this.drawTargetBackground();
@@ -1011,15 +1015,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
 
     Window_CTBTimeline.prototype.drawTrackSlot = function(x, y, width, height, value, i) {
-        if (
-            this._timelineSlots &&
-            this._timelineSlots[i] &&
-            this._timelineSlots[i].type === "statePreview"
-        ) {
-            this.contents.textColor = "#00FF00";
-            this.drawText("S", x, y - 14, width, "center");
-            this.resetTextColor();
-        }
         this.contents.fillRect(
             x,
             y,
@@ -1232,7 +1227,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Game_Battler.prototype.ctbPreviewInitiative = function() {
         var action = this._ctbActionPreview;
-        if (DEBUG_Timeline) console.log("PREVIEW INIT:", this.name(), this.initiative, action ? action.item().initiative : null);
+        //if (DEBUG_Timeline) console.log("PREVIEW INIT:", this.name(), this.initiative, action ? action.item().initiative : null);
         if (!action || !action.item()) return this.initiative;
         return this.initiative + (action.item().initiative || 0);
     };
@@ -1284,6 +1279,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                 });
             }
             BattleManager.addTimelineExtensionEntries(entries, battler);
+            console.log(entries);
             if (DEBUG_Timeline && showlog) {
                 console.log(
                     battler.ctbActionPreview(),
