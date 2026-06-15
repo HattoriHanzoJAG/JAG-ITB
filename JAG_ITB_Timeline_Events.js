@@ -193,7 +193,7 @@
             } else { */
             if (DEBUG_EVENTS) console.log("New event scheduled:", item.selfState.stateId);
             this._ITBEvents.push({
-                skillId: item.Id,
+                skillId: item.id,
                 stateId: item.selfState.stateId,
                 triggerInitiative: initiative + item.selfState.offset
             });
@@ -430,9 +430,9 @@
         }
     } */
 
-    var _CTBAI_init = Window_CTBActionIcon.prototype.initialize;
-    Window_CTBActionIcon.prototype.initialize = function() {
-        _CTBAI_init.call(this);
+    var TE_CTBAI_init = Window_CTBActionIcon.prototype.initialize;
+    Window_CTBActionIcon.prototype.initialize = function(mainSprite) {
+        TE_CTBAI_init.call(this, mainSprite);
         this.createStatePreviewWindow();
     };
 
@@ -541,12 +541,12 @@
         this.initialize.apply(this, arguments);
     };
 
-    Window_CTBActionIconStatePreview.prototype = Object.create(Window_CTBActionIcon.prototype);
+    Window_CTBActionIconStatePreview.prototype = Object.create(Window_Base.prototype);
     Window_CTBActionIconStatePreview.prototype.constructor = Window_CTBActionIconStatePreview;
 
     Window_CTBActionIconStatePreview.prototype.initialize = function(parent) {
         this._parent = parent;
-        Window_CTBActionIcon.prototype.initialize.call(this, parent);
+        Window_Base.prototype.initialize.call(this, parent);
         this.opacity = 0;
         this.contentsOpacity = 255;
     };
@@ -587,7 +587,7 @@
         var iconIndex = state.iconIndex;
         if (!iconIndex) return;
         this.drawActionBorderAt(0, 0, "#66CCFF");
-        this.drawIcon(iconIndex, 4, 4);
+        this.drawActionIcon(iconIndex, 4, 4);
     };
 
     Game_Battler.prototype.previewSelfState = function() {
@@ -602,12 +602,12 @@
         };
     };
 
-    /* var TE_SB_addCTBIcon = Sprite_Battler.prototype.addCTBIcon;
+    var TE_SB_addCTBIcon = Sprite_Battler.prototype.addCTBIcon;
     Sprite_Battler.prototype.addCTBIcon = function() {
         TE_SB_addCTBIcon.call(this);
         this._ctbStatePreviewIcon = new Window_CTBActionIcon(this);
         this._ctbStatePreviewIcon._timelineEntryType = "statePreview";
         //console.log("ADD STATE ICON");
-    } */;
+    };
     
 })();
