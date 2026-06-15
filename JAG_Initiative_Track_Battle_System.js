@@ -543,7 +543,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         if (this._battler.isDead()) return;
         var timeline = BattleManager.timelineWindow();
         if (!timeline) return;
-        var initiative = this._battler.initiative || this._battler.ctbTicksToReady() || 0;
+        //var initiative = this._battler.initiative || this._battler.ctbTicksToReady() || 0;
         var slot = timeline.slotForBattler(this._battler);
         this._destinationX = timeline.x + timeline.slotCenterX(slot) - this.width/10 - 2;
     };
@@ -664,7 +664,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this.drawActionIcon(this._iconIndex, 2, 20);
         if (this._previewState) {
             //if (DEBUG_Timeline) console.log("Draw preview arrow");
-            this.drawPreviewArrow();
+            this.drawPreviewArrow("#F7E839");
         }
         this.drawTargetBackground();
         this.drawTargetMiniIcon();
@@ -841,7 +841,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }
     };
 
-    Window_CTBActionIcon.prototype.drawPreviewArrow = function() {
+    Window_CTBActionIcon.prototype.drawPreviewArrow = function(color) {
         var ctx = this.contents._context;
         var cx = 3 * this.contents.width / 8 - 3;
         // tip of arrow
@@ -851,7 +851,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         // half width
         var half = 6;
         ctx.save();
-        ctx.fillStyle = "#F7E839";
+        ctx.fillStyle = color;
         ctx.strokeStyle = "#000000";
         ctx.lineWidth = 1;
         ctx.beginPath();
