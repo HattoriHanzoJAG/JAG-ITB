@@ -24,8 +24,8 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
 (function() {
 
-    const DEBUG_ITB = false;
-    const DEBUG_Timeline = true;
+    const DEBUG_ITB = true;
+    const DEBUG_Timeline = false;
 
     var _DataManager_isDatabaseLoaded = DataManager.isDatabaseLoaded;
     DataManager.isDatabaseLoaded = function() {
@@ -545,7 +545,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         if (!timeline) return;
         //var initiative = this._battler.initiative || this._battler.ctbTicksToReady() || 0;
         var slot = timeline.slotForBattler(this._battler);
-        this._destinationX = timeline.x + timeline.slotCenterX(slot) - this.width/10 - 2;
+        this._destinationX = timeline.x + timeline.slotCenterX(slot - 1) - this.width/10 - 2;
     };
 
     Window_CTBIcon.prototype.iconWidth = function() {
@@ -748,7 +748,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         var targets = action.makeTargets();
         if (!targets || targets.length === 0) return null;
         var target = targets[0];
-        if (target === this._battler) return null;
+        //if (target === this._battler) return null;
         return target;
     };
 
@@ -946,9 +946,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }));
     };   
 
-    Window_CTBTimeline.prototype.initiativeToSlot = function(initiative) { 
-        return Math.floor((initiative - this.currentInitiative()) / this._scale);
-    };
+    //Window_CTBTimeline.prototype.initiativeToSlot = function(initiative) { 
+    //    return Math.floor((initiative - this.currentInitiative()) / this._scale);
+    //};
 
     Window_CTBTimeline.prototype.getTimelineScale = function(members) {
         const count = this.slotCount();
@@ -981,12 +981,12 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         return BattleManager.timelineSlotCount();
     };
 
-    Window_CTBTimeline.prototype.initiativeToX = function(initiative) {
+    /* Window_CTBTimeline.prototype.initiativeToX = function(initiative) {
         const stepSize = this.slotCount() * this._scale; // initiative per tick segment
         const range = initiative - this.currentInitiative();
         const timelineWidth = this.timelineRight() - this.timelineLeft();
         return this.timelineLeft() + (range / stepSize) * timelineWidth;
-    };
+    }; */
 
     Window_CTBTimeline.prototype.redraw = function() {
         this.contents.clear();
@@ -995,7 +995,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
 
     Window_CTBTimeline.prototype.drawTrack = function() {
-        var current = this.currentInitiative();
+        //var current = this.currentInitiative();
         var x = this.timelineLeft();
         var values = this.buildDisplayedInitiatives();
         for (var i = 0; i < this.slotCount(); i++) {
@@ -1102,7 +1102,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBTimeline.prototype.buildTimelineSlots = function() {
         if (DEBUG_Timeline) console.log("Build Timeline Slots");
-        var current = this.currentInitiative();
+        var current = BattleManager.timelineAnchorInitiative() ?? this.currentInitiative();
         //var members = BattleManager.sortBattleMembers().filter(function(member) {
         //    return member && member.isAlive();
         //});
@@ -1166,7 +1166,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }
         var next = values.length > 0
                 ? values[values.length - 1] + this._scale
-                : this.currentInitiative();
+                : (this._timelineAnchorInitiative || this.currentInitiative());
         while (values.length < this.slotCount()) {
             values.push(next);
             next += this._scale;
@@ -1177,7 +1177,8 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     Window_CTBTimeline.prototype.slotForBattler = function(battler) {
         if (!this._timelineSlots) return 0;
         for (var i = 0; i < this._timelineSlots.length; i++) {
-            if (this._timelineSlots[i].battler === battler) return i;
+            var slot = this._timelineSlots[i];
+            if (slot.type === "battler" && slot.battler === battler) return i + 1;
         }
         return 0;
     };
@@ -1230,6 +1231,10 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         //if (DEBUG_Timeline) console.log("PREVIEW INIT:", this.name(), this.initiative, action ? action.item().initiative : null);
         if (!action || !action.item()) return this.initiative;
         return this.initiative + (action.item().initiative || 0);
+    };
+
+    BattleManager.timelineAnchorInitiative = function() {
+        return this._timelineAnchorInitiative;
     };
 
     BattleManager.timelineWindow = function() {
