@@ -24,8 +24,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
 (function() {
 
-    const DEBUG_ITB = true;
-    const DEBUG_Timeline = false;
+    const TRACE_ITB = true;
+    const DEBUG_ITB = false;
+    const DEBUG_Timeline = true;
 
     var _DataManager_isDatabaseLoaded = DataManager.isDatabaseLoaded;
     DataManager.isDatabaseLoaded = function() {
@@ -58,7 +59,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
     
     Game_Battler.prototype.setupCTBCharge = function() {
-        if (DEBUG_ITB) console.log("=== SETUP CTB CHARGE ===");
+        if (TRACE_ITB || DEBUG_ITB) console.log("=== SETUP CTB CHARGE === I", this._initiative);
 	    var action = this.currentAction();
         if (DEBUG_ITB) {
             console.log("Subject:", this.name());
@@ -73,9 +74,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         if (action) {
             var item = action.item();
             if (item) {
-                if (DEBUG_ITB) {
-                    console.log("APPLYING CTB CHARGE");
-                    console.log("Action item:", item.name);  
+                if (TRACE_ITB || DEBUG_ITB) {
+                    console.log("APPLYING CTB CHARGE I", this._initiative);
+                    if (DEBUG_ITB) console.log("Action item:", item.name);  
                 }
                 this.setCTBCharging(true);
                 // initiative cost becomes charge duration
@@ -179,8 +180,8 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     var _BattleManager_startCTBInput = BattleManager.startCTBInput;
     BattleManager.startCTBInput = function(battler) {
+        if (TRACE_ITB || DEBUG_ITB) console.log("=== START CTB INPUT === I", battler._initiative);
         if (DEBUG_ITB) {
-            console.log("=== START CTB INPUT ===");
             console.log("Battler:", battler.name());
             console.log("Alive:", battler.isAlive());
             console.log("Last Target:", battler._lastTargetIndex);
@@ -194,8 +195,8 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Yanfly.CTB.BattleManager_selectNextCommand = BattleManager.selectNextCommand;
     BattleManager.selectNextCommand = function() {
+        if (TRACE_ITB || DEBUG_ITB) console.log("SELECT NEXT COMMAND: Initiative CTB System");
         if (DEBUG_ITB) {
-            console.log("SELECT NEXT COMMAND: Initiative CTB System");
             console.log("Actor:", this.actor().name());
             console.log("Action:", this.actor().currentAction());
         }
@@ -203,15 +204,14 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         if (!this.actor()) return this.setCTBPhase();
         this.resetNonPartyActorCTB();
         this._subject = this.actor();
-        if (DEBUG_ITB) console.log("CALLING setupCTBCharge");
+        if (TRACE_ITB || DEBUG_ITB) console.log("CALLING setupCTBCharge");
         this.actor().setupCTBCharge();
         //console.log("Queued:", this.actor()._queued);
         //console.log("Initiative:", this.actor()._initiative);
         if (this.actor().isCTBCharging()) {
+            if (TRACE_ITB || DEBUG_ITB) console.log("ADVANCING CTB PHASE I", this.actor()._initiative);
             if (DEBUG_ITB) {
-                console.log("ADVANCING CTB PHASE");
                 console.log("actor:", this.actor().name());
-                console.log("initiative:", this.actor()._initiative);
             }
             this.actor().spriteStepBack();
             this.actor().requestMotionRefresh();
@@ -232,9 +232,11 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     var _Game_Action_executeHpDamage = Game_Action.prototype.executeHpDamage;
     Game_Action.prototype.executeHpDamage = function(target, value) {
         _Game_Action_executeHpDamage.call(this, target, value);
-        if (DEBUG_ITB) {
+        if (TRACE_ITB || DEBUG_ITB) {
             console.log(" ");
             console.log("=== EXECUTE HP DAMAGE ===");
+        }
+        if (DEBUG_ITB) {
             console.log("Target:", target.name());
             console.log("Damage:", value);
         }
@@ -318,7 +320,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     var _BM_onCTBStart = Game_Battler.prototype.onCTBStart;
         Game_Battler.prototype.onCTBStart = function() {
         _BM_onCTBStart.call(this)
-        if (DEBUG_ITB) {
+        if (TRACE_ITB || DEBUG_ITB) {
             console.log(" ");
             console.log("==== ON CTB START ====");
         }
@@ -329,10 +331,10 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     var _BM_endAction = BattleManager.endAction;
     BattleManager.endAction = function() {
 	    var subject = this._subject;
-        if (DEBUG_ITB) {
+        if (TRACE_ITB || DEBUG_ITB) {
             console.log(" ");
             console.log("==== END ACTION ====");
-            console.log(subject.name());
+            if (DEBUG_ITB) console.log(subject.name());
         }
         BattleManager.ctbTicksToReadyClear();
         //if (subject) this._showCTBActionIcon = false;
@@ -343,15 +345,19 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     var _BM_startAction = BattleManager.startAction;
     BattleManager.startAction = function() {
         _BM_startAction.call(this)
-        if (DEBUG_ITB) {
+        if (TRACE_ITB || DEBUG_ITB)  {
             console.log(" ");
             console.log("==== START ACTION ====");
-            this.debugState();
+            if (DEBUG_ITB) this.debugState();
         }
     };
 
     var _BM_startCTBAction = BattleManager.startCTBAction;
     BattleManager.startCTBAction = function(battler) {
+        if (TRACE_ITB || DEBUG_ITB) {
+            console.log(" ");
+            console.log("=== START ACTION === I", battler._initiative);
+        }
         this._subject = battler;
         var action = battler.currentAction();
         // INVALID SUBJECT
@@ -366,8 +372,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             this.endAction();
         }
         if (DEBUG_ITB) {
-            console.log(" ");
-            console.log("=== START ACTION ===");
             console.log(battler.name());
             console.log(battler.currentAction());
         }	
@@ -389,14 +393,14 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     }; 
 
     BattleManager.requestTimelineRefresh = function(reason) {
-        if (DEBUG_ITB) console.log("TIMELINE REFRESH:", reason);
-        if (DEBUG_ITB) this._showlog = true;
+        if (TRACE_ITB || DEBUG_Timeline) console.log("TIMELINE REFRESH:", reason);
+        if (DEBUG_Timeline) this._showlog = true;
         this._timelineVersion++;
     };
 
     //var _SB_commandAttack = Scene_Battle.prototype.commandAttack;
     Scene_Battle.prototype.commandAttack = function() {
-        if (DEBUG_ITB) console.log("COMMAND ATTACK");
+        if (TRACE_ITB || DEBUG_ITB) console.log("COMMAND ATTACK");
         var actor = BattleManager.actor();
         var action = BattleManager.inputtingAction();
         action.setAttack();
@@ -937,6 +941,10 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
 
     Window_CTBTimeline.prototype.currentInitiative = function() {
+        var anchor = BattleManager._timelineAnchorInitiative;
+        console.log("Current initiative");
+        console.log("Anchor:", anchor);
+        if (anchor !== undefined && anchor !== null) return anchor;
         var members = BattleManager.sortBattleMembers().filter(function(member) {
             return member && member.isAlive();
         });
@@ -1101,8 +1109,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
 
     Window_CTBTimeline.prototype.buildTimelineSlots = function() {
-        if (DEBUG_Timeline) console.log("Build Timeline Slots");
-        var current = BattleManager.timelineAnchorInitiative() ?? this.currentInitiative();
+        var current = this.currentInitiative();
+        if (DEBUG_Timeline) console.log("Build timeline slots from:", current);
+        if (DEBUG_Timeline) console.log("Anchor initiative:", BattleManager._timelineAnchorInitiative);
         //var members = BattleManager.sortBattleMembers().filter(function(member) {
         //    return member && member.isAlive();
         //});
@@ -1166,7 +1175,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }
         var next = values.length > 0
                 ? values[values.length - 1] + this._scale
-                : (this._timelineAnchorInitiative || this.currentInitiative());
+                : this.currentInitiative();
         while (values.length < this.slotCount()) {
             values.push(next);
             next += this._scale;
@@ -1233,10 +1242,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         return this.initiative + (action.item().initiative || 0);
     };
 
-    BattleManager.timelineAnchorInitiative = function() {
-        return this._timelineAnchorInitiative;
-    };
-
     BattleManager.timelineWindow = function() {
         var scene = SceneManager._scene;
         if (!scene) return null;
@@ -1284,7 +1289,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                 });
             }
             BattleManager.addTimelineExtensionEntries(entries, battler);
-            console.log(entries);
             if (DEBUG_Timeline && showlog) {
                 console.log(
                     battler.ctbActionPreview(),

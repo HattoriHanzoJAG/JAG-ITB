@@ -31,6 +31,7 @@
 
 (function() {
 
+    const TRACE_CONNECTORS = false;
     const DEBUG_CONNECTORS = false;
 
     //=============================================================================
@@ -250,8 +251,8 @@
 
     BattleManager.connectorValidationState = function(actor) {
         // Combo continuation
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("CONNECTOR VALIDATION STATE");
         if (DEBUG_CONNECTORS) {
-            console.log("CONNECTOR VALIDATION STATE");
             console.log("actor:", actor.name());
             console.log("preview target:", actor._connectorPreviewTarget);
         }
@@ -271,9 +272,9 @@
 
     var Connector_BM_selectNextCommand = BattleManager.selectNextCommand;
     BattleManager.selectNextCommand = function() {
-        if (DEBUG_CONNECTORS) {
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
             console.log("=== SELECT NEXT COMMAND ===");
-            console.log(new Error().stack);
+            if (DEBUG_CONNECTORS) console.log(new Error().stack);
         }
         var actor = this.actor();
         var action = this.inputtingAction();
@@ -303,7 +304,7 @@
             );
         }
         if (actor && action && actor._connectorPreviewTarget) {
-            if (DEBUG_CONNECTORS) console.log("AUTO QUEUE CONNECTOR ACTION");
+            if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("AUTO QUEUE CONNECTOR ACTION");
             var target = actor._connectorPreviewTarget;
             // Inject stored target for action requiring target selection
             if (action.needsSelection()) {
@@ -320,7 +321,7 @@
         }
         // Return to queue input mode
         if (actor && actor._queueInputActive) {
-            if (DEBUG_CONNECTORS) console.log("RETURN TO COMMAND INPUT");
+            if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("RETURN TO COMMAND INPUT");
             SceneManager._scene._skillWindow.hide();
             SceneManager._scene._itemWindow.hide();
             SceneManager._scene._enemyWindow.hide();
@@ -442,7 +443,7 @@
 
     Connector_GB_setupCTBCharge = Game_Battler.prototype.setupCTBCharge;
     Game_Battler.prototype.setupCTBCharge = function() {
-        if (DEBUG_CONNECTORS) console.log("ACTION CONNECTOR SETUP CTB CHARGE");
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("ACTION CONNECTOR SETUP CTB CHARGE");
         var action = this.currentAction();
         if (DEBUG_CONNECTORS) console.log("Current Action:", action);
         if (DEBUG_CONNECTORS) console.log("Action item:", action ? action.item() : null);
@@ -636,7 +637,7 @@
 
     // Validate Target
     Game_Action.prototype.canConnectToTarget = function(target) {
-        if (DEBUG_CONNECTORS) console.log("CAN CONNECT TO TARGET");
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("CAN CONNECT TO TARGET");
         if (!target) return true;
         var state = target.connectorState();
         if (!state) return true;
@@ -645,7 +646,7 @@
 
     // Validate Entire State
     Game_Action.prototype.canConnectToState = function(state) {
-        if (DEBUG_CONNECTORS) {
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
             console.log("CAN CONNECT TO STATE");
             console.log("Skill:", this.item().name);
             console.log("State:", state);
@@ -740,7 +741,7 @@
     */
 
     Game_Action.prototype.buildResultState = function(sourceState) {
-        if (DEBUG_CONNECTORS) console.log("Build Result State");
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("Build Result State");
         var result = JsonEx.makeDeepCopy(sourceState || {});
         if (!result._connectorRules) {
             result._connectorRules = {};
@@ -774,7 +775,7 @@
     var Connector_SB_onEnemyOk = Scene_Battle.prototype.onEnemyOk;
     Scene_Battle.prototype.onEnemyOk = function() {
         var actor = BattleManager.actor();
-        if (DEBUG_CONNECTORS) console.log("ON ENEMY OK");
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("ON ENEMY OK");
         // ----------------------------------
         // CONNECTOR TARGET PRESELECTION
         // ----------------------------------
@@ -792,7 +793,7 @@
 
     var Connector_SB_onActorOk = Scene_Battle.prototype.onActorOk;
     Scene_Battle.prototype.onActorOk = function() {
-        if (DEBUG_CONNECTORS) console.log("ON ACTOR OK");
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("ON ACTOR OK");
         var actor = BattleManager.actor();
         // ----------------------------------
         // CONNECTOR TARGET PRESELECTION
@@ -811,8 +812,8 @@
 
     Scene_Battle.prototype._queueAction = function(action, target, type) {
         var actor = BattleManager.actor();
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("QUEUE ACTION");
         if (DEBUG_CONNECTORS) {
-            console.log("QUEUE ACTION");
             console.log(
                 "STATE",
                 {
@@ -859,8 +860,8 @@
     var Connector_SB_finishActionQueue = Scene_Battle.prototype.finishActionQueue;
     Scene_Battle.prototype.finishActionQueue = function() {
         var actor = BattleManager.actor();
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("FINISH ACTION QUEUE");
         if (DEBUG_CONNECTORS) {
-            console.log("FINISH ACTION QUEUE");
             console.log(
                 "STATE",
                 {
@@ -889,8 +890,8 @@
 
     Connector_SB_startActorCommandSelection = Scene_Battle.prototype.startActorCommandSelection;
     Scene_Battle.prototype.startActorCommandSelection = function() {
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("START ACTOR COMMAND SELECTION");
         if (DEBUG_CONNECTORS) {
-            console.log("START ACTOR COMMAND SELECTION");
             console.log(
                 this._actorCommandWindow.active,
                 this._actorCommandWindow.visible,
@@ -940,8 +941,8 @@
     var Connector_SB_selectEnemySelection = Scene_Battle.prototype.selectEnemySelection;
     Scene_Battle.prototype.selectEnemySelection = function() {
         var actor = BattleManager.actor();
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("Select Enemy Selection");
         if (DEBUG_CONNECTORS) {
-            console.log("Select Enemy Selection");
             console.log("Actor", !!actor);
             console.log("Queue length", actor ? actor.queueLength() : null);
             console.log("Preview target:", actor ? actor._connectorPreviewTarget : null);
@@ -955,7 +956,7 @@
 
     var Connector_BM_selectPrevious = Scene_Battle.selectPreviousCommand;
     Scene_Battle.selectPreviousCommand = function() {
-        if (DEBUG_CONNECTORS) console.log("Select Previous Command");
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("Select Previous Command");
         var actor = BattleManager.actor();
         if (!actor || !actor._connectorPreviewTarget) return;
         Connector_BM_selectPrevious.call(this);

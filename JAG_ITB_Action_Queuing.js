@@ -17,17 +17,18 @@
 
 (function() {
 
+    const TRACE_QUEUING = true;
     const DEBUG_QUEUING = false;
 
     var AQ_BM_endAction = BattleManager.endAction;
     BattleManager.endAction = function() {
-        if (DEBUG_QUEUING) console.log("END ACTION");
+        if (TRACE_QUEUING || DEBUG_QUEUING) console.log("END ACTION QUEUING");
         AQ_BM_endAction.call(this);
         var subject = this._subject;
         if (DEBUG_QUEUING) console.log("END ACTION COMPLETE");
         if (subject && subject.isActor()) {
             if (subject._actionQueue && subject._actionQueue.length > 0) {  
-                if (DEBUG_QUEUING) console.log("SHIFT QUEUE");
+                if (TRACE_QUEUING || DEBUG_QUEUING) console.log("SHIFT QUEUE");
                 subject._actionQueue.shift();
             }
         }
@@ -59,7 +60,7 @@
     };
 
     Game_Battler.prototype.createActionFromQueueData = function(data) {
-        if (DEBUG_QUEUING) console.log("Create action from queue data");
+        if (TRACE_QUEUING || DEBUG_QUEUING) console.log("Create action from queue data");
         var action = new Game_Action(this);
         if (data.isAttack) {
             action.setAttack();
@@ -100,7 +101,7 @@
 
     // Clear Action Queue
     Game_Battler.prototype.clearActionQueue = function() {
-        if (DEBUG_QUEUING) Console.log("Clear action queue")
+        if (TRACE_QUEUING || DEBUG_QUEUING) Console.log("Clear action queue")
         this._actionQueue = [];
     };
 
@@ -137,8 +138,8 @@
         }
         var action = BattleManager.inputtingAction();
         var target = this._enemyWindow.enemy();
+        if (TRACE_QUEUING || DEBUG_QUEUING) console.log("=== QUEUE ENEMY ACTION ===");
         if (DEBUG_QUEUING) {
-            console.log("=== QUEUE ENEMY ACTION ===");
             console.log("actor:", BattleManager.actor().name());
             console.log("action:", action.item() ? action.item().name : null);
             console.log("target:", target.name());
@@ -177,9 +178,9 @@
 
     var AQ_WAC_makeCommandList = Window_ActorCommand.prototype.makeCommandList;
     Window_ActorCommand.prototype.makeCommandList = function() {
-        if (DEBUG_QUEUING) {
+        if (TRACE_QUEUING || DEBUG_QUEUING) {
             console.log("MAKE COMMAND LIST");
-            console.log("actor:", this._actor);
+            if (DEBUG_QUEUING) console.log("actor:", this._actor);
         }
         AQ_WAC_makeCommandList.call(this);
         if (!this._actor) return;
@@ -199,7 +200,7 @@
     };
 
     Scene_Battle.prototype.finishActionQueue = function() {
-        if (DEBUG_QUEUING) console.log("FINISH QUEUE");
+        if (TRACE_QUEUING || DEBUG_QUEUING) console.log("FINISH QUEUE");
         var actor = BattleManager.actor();
         if (!actor) return;
         actor.promoteQueuedAction();
@@ -208,8 +209,8 @@
     };
 
     Scene_Battle.prototype.commandGuard = function() {
+        if (TRACE_QUEUING || DEBUG_QUEUING) console.log("=== QUEUE GUARD ===");
         if (DEBUG_QUEUING) {
-            console.log("=== QUEUE GUARD ===");
             console.log("actor:", BattleManager.actor().name());
             console.log(
                 "inputting action:",
@@ -235,7 +236,7 @@
 
     AQ_SB_startActorCommandSelection = Scene_Battle.prototype.startActorCommandSelection;
     Scene_Battle.prototype.startActorCommandSelection = function() {
-        if (DEBUG_QUEUING) console.log("START ACTOR COMMAND SELECTION");
+        if (TRACE_QUEUING || DEBUG_QUEUING) console.log("START ACTOR COMMAND SELECTION");
         AQ_SB_startActorCommandSelection.call(this);
         var actor = BattleManager.actor();
         if (actor) {
@@ -344,7 +345,7 @@
             this.contents.clear();
             this.drawActionBorder();
             this.drawActionIcon(this._iconIndex, 2, 20);
-            if (this._previewState) this.drawPreviewArrow();
+            if (this._previewState) this.drawPreviewArrow("#F7E839");
             this.drawTargetBackground();
             this.drawTargetMiniIcon();
             this.contents.paintOpacity = 255;
