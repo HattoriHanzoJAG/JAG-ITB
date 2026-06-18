@@ -363,9 +363,17 @@
     BattleManager.updateTimelineEvent = function() {
         //if (!this._timelineEventActive) return;
         this._timelineEventFrames--;
+        this._timelineEventBlink++;
+        //if (this._timelineEventBlink >=8) {
+        //    this._timelineEventBlink = 0;
+        //    this._timelineEventVisible = !this._timelineEventVisible;
+        //    var timeline = this.timelineWindow();
+        //    if (timeline) timeline.refresh();
+        //}
         if (this._timelineEventFrames > 0) return;
         this._timelineEventActive = false;
         this._timelineAnchorInitiative = undefined;
+        this.updateITBEvents();
         this.requestTimelineRefresh("Apply selfstate");
         //this.executeTimelineEvent(this._scheduledState);
         //this.finishTimelineEvent();
@@ -419,15 +427,24 @@
     // Detect timeline event activation
     //--------------------------------------------------------------------------
 
-    const TE_BM_endCTBAction = BattleManager.endCTBAction;
+    /* const TE_BM_endCTBAction = BattleManager.endCTBAction;
     BattleManager.endCTBAction = function() {
         //if (this.checkTimelineEvents()) return;
         TE_BM_endCTBAction.call(this);
         if (!this._timelineEventActive) {
             this.updateITBEvents();
-            this.requestTimelineRefresh("Update ITB Event");
+            //this.requestTimelineRefresh("Update ITB Event");
         }
-    };
+    }; */
+    /* const TE_BM_startCTBInput = BattleManager.startCTBInput;
+    BattleManager.startCTBInput = function(battler) {
+        //if (this.checkTimelineEvents()) return;
+        TE_BM_startCTBInput.call(this, battler);
+        if (!this._timelineEventActive) {
+            this.updateITBEvents();
+            //this.requestTimelineRefresh("Update ITB Event");
+        }
+    }; */
 
     /* const JAG_BM_endCTBAction = BattleManager.endCTBAction;
     BattleManager.endCTBAction = function() {
@@ -461,7 +478,8 @@
         console.log("Slot", slot);
         this._timelineEventActive = true;
         this._scheduledState = slot;
-        this._timelineEventFrames = 60;
+        this._timelineEventBlink = 0;
+        this._timelineEventFrames = 120;
     };
 
     BattleManager.isTimelineEventBusy = function() {
@@ -526,6 +544,8 @@
     BattleManager.update = function() {
         if (this._timelineEventActive) {
             this.updateTimelineEvent();
+            //this.updateITBEvents();
+            //this.requestTimelineRefresh("Update ITB Event");
             return
         }
         TE_BM_update.call(this);
@@ -585,7 +605,7 @@
                 battler: battler,
                 stateId: selfState.stateId,
                 initiative: selfState.initiative,
-                activationOrder: battler._activationOrder || 0,
+                activationOrder: battler.previewActivationOrder(),
                 preview: true
             });
         }
@@ -708,6 +728,17 @@
         return this._battler.previewSelfState();
     };
 
+    var TE_CTBAI_updateBlink = Window_CTBActionIcon.prototype.updateBlink;
+    Window_CTBActionIcon.prototype.updateBlink = function() {
+        if (BattleManager._timelineEventActive) {
+            var visible = Math.floor(BattleManager._timelineEventBlink / 12) % 4 < 2;
+            this._blinkOpacity = visible ? 255 : 0
+            //opacity = Graphics.frameCount % 48 < 32 ? 255 : 0;
+            return;
+        }
+        TE_CTBAI_updateBlink.call(this);
+    };
+
     function Window_CTBActionIconStatePreview(parent) {
         this.initialize.apply(this, arguments);
     };
@@ -778,12 +809,6 @@
         if (!battler) return;
         var timelineState = battler.currentTimelineState();
         if (!timelineState) return;
-        var state = $dataStates[timelineState.stateId];
-        if (!state) return;
-        var iconIndex = state.iconIndex;
-        if (!iconIndex) return;
-        //console.log("Draw Icon");
-        //this.drawActionBorder();
         if (timelineState.type === "statePreview") {
             var queue = battler._actionQueue;
             if (!queue || queue.length <= 1) {
@@ -792,10 +817,15 @@
             }
             this.drawPreviewArrow("#66CCFF");
         } else if (BattleManager._timelineEventActive) {
+            //if (!BattleManager._timelineEventVisible) return;
             //var visible = Math.floor(BattleManager._timelineEventBlink / 8) % 2 === 0;
             //if (!visible) return;
             this.contents.paintOpacity = this._blinkOpacity;
         }
+        var state = $dataStates[timelineState.stateId];
+        if (!state) return;
+        var iconIndex = state.iconIndex;
+        if (!iconIndex) return;
         this.drawActionBorderAt(-1, 17, "#66CCFF");
         this.drawActionIcon(iconIndex, 2, 20);
         this.drawTargetBackground();

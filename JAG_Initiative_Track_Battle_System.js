@@ -304,6 +304,10 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }
     };
 
+    Game_Battler.prototype.previewActivationOrder = function() {
+        return BattleManager._activationCounter + 1 || 1;
+    };
+
     BattleManager.initializeActivationOrder = function() {
         this._activationCounter = 0;
         this.allBattleMembers().forEach(function(battler) {
@@ -427,6 +431,18 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         _SB_onSelectAction.call(this);
     };
 
+    var JAG_CTB_update = Window_CTBIcon.prototype.update;
+    Window_CTBIcon.prototype.update = function() {
+        JAG_CTB_update.call(this);
+        this.updateSize();
+        //if (this._needsResize) {
+            //console.log("Needs resize:", this._needsResize);
+            //this.resizeForBattler();
+            //this._needsResize = false;
+            //if (icon._redraw) icon.createContents();
+        //}
+    };
+
     var _CTB_updateRedraw = Window_CTBIcon.prototype.updateRedraw;
     Window_CTBIcon.prototype.updateRedraw = function() {
         _CTB_updateRedraw.call(this);
@@ -437,7 +453,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         if (!this._battler) return;
         var value = this._battler.initiative || this._battler.ctbTicksToReady() || 0;
 	    var y = this.contents.height - this.lineHeight() + 12;
-        this.contents.fontSize = 17;
+        this.contents.fontSize = Math.floor(17 * Math.sqrt(this.iconScale(this._battler)));
         this.changeTextColor(this.textColor(6));
         this.drawText(
             value,
@@ -462,11 +478,48 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this._lastTimelineVersion = -1;
     };
 
+    /* Window_CTBIcon.prototype.updateBattler = function() {
+        var changed = this._battler !== this._mainSprite._battler;
+        if (this._battler && this._battler._ctbTransformed) changed = true;
+        if (!changed) return;
+        this._battler = this._mainSprite._battler;
+        if (!this._battler) return this.removeCTBIcon();
+        this._battler._ctbTransformed = undefined;
+        this._iconIndex = this._battler.ctbIcon();
+        this._needsResize = true;
+        if (this._iconIndex > 0) {
+        this._image = ImageManager.loadSystem('IconSet');
+        } else if (this._battler.isEnemy()) {
+        if (this.isUsingSVBattler()) {
+            var name = this._battler.svBattlerName();
+            this._image = ImageManager.loadSvActor(name);
+        } else {
+            var battlerName = this._battler.battlerName();
+            var battlerHue = this._battler.battlerHue();
+            if ($gameSystem.isSideView()) {
+            this._image = ImageManager.loadSvEnemy(battlerName, battlerHue);
+            } else {
+            this._image = ImageManager.loadEnemy(battlerName, battlerHue);
+            }
+        }
+        } else if (this._battler.isActor()) {
+        var faceName = this._battler.faceName();
+        this._image = ImageManager.loadFace(faceName);
+        }
+        this._redraw = true;
+    }; */
+
     Window_CTBIcon.prototype.destinationY = function() {
         var timeline = BattleManager.timelineWindow();
         if (!timeline) return 0;
-        var value = timeline.y + timeline.trackBottom() - this.iconHeight() - 16;
-        if (this._battler && this._battler.isSelected()) value -= this.contents.height / 4;
+        var height = this.iconHeight();
+        var value = timeline.y + timeline.trackBottom() - height - 16;
+        var battler = this._battler;
+        if (!battler) return value
+        if (battler.isSelected()) value -= Math.floor(height / 4);
+        if (timeline.slotForBattler(battler) === 1) {
+            value -= Math.floor(height * (this.iconScale(battler) - 1));
+        }
         return value;
     };
 
@@ -544,13 +597,58 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBIcon.prototype.updateDestinationX = function() {
         if (!this._battler) return;
-        if (this._battler.isDead()) return;
+        var battler = this._battler;
+        if (battler.isDead()) return;
         var timeline = BattleManager.timelineWindow();
         if (!timeline) return;
         //var initiative = this._battler.initiative || this._battler.ctbTicksToReady() || 0;
-        var slot = timeline.slotForBattler(this._battler);
+        var slot = timeline.slotForBattler(battler);
         this._destinationX = timeline.x + timeline.slotCenterX(slot - 1) - this.width/10 - 2;
+        //console.log("Destination X:", this._destinationX);
+        if (slot === 1) this._destinationX -= Math.floor(this.iconWidth() * (this.iconScale(battler) - 1));
+            //console.log("Scale:", this.iconScale(battler));
+            //console.log("Delta X:", Math.floor(this.iconWidth() * (this.iconScale(battler) - 1)));
+            //console.log("Destination X:", this._destinationX);
+        //}
     };
+
+    Window_CTBIcon.prototype.updateSize = function() {
+        if (!this._battler) return;
+        var scale = this.iconScale(this._battler);
+        if (this._currentScale === scale) return;
+        this._currentScale = scale;
+        var w = Math.floor(this.iconWidth() * scale) + 8 + this.standardPadding() * 2;
+        var h = Math.floor(this.iconHeight() * scale) + 14 + this.standardPadding() * 2;
+        this.move(this.x, this.y, w, h);
+        this.createContents();
+        this._redraw = true;
+    };
+
+    /* Window_CTBIcon.prototype.resizeForBattler = function() {
+        var scale = this.iconScale();
+        //console.log("Scale:", scale);
+        //var width = Math.floor(this.iconWidth() * scale) + 8 + this.standardPadding() * 2;
+        //var height = Math.floor(this.iconHeight() * scale) + 14 + this.standardPadding() * 2;
+        //this.contents.resize(this.width - this.standardPadding() * 2,
+        //                    this.height - this.standardPadding() * 2);
+        //this._redraw = true;
+        if (scale > 1.0) {
+            var wb = this.iconWidth();
+            var hb = this.iconHeight();
+            var sp = this.standardPadding() * 2;
+            var w = Math.floor(wb * scale) + 8 + sp;
+            var h = Math.floor(hb * scale) + 14 + sp;
+            //var dx = Math.floor(wb * scale) - wb;
+            //var dy = Math.floor(hb * scale) - hb;
+            //console.log("dx", dx);
+            //console.log("dy", dy);
+            //console.log("wb", wb);
+            //console.log("hb", hb);
+            this.move(this.x, this.y, w, h);
+            this.createContents();
+            //this._redraw = true;
+        }
+    }; */
 
     Window_CTBIcon.prototype.iconWidth = function() {
         var timelineWidth = Graphics.boxWidth - BattleManager.timelineMargin() - 80;
@@ -561,11 +659,16 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         return this.iconWidth();
     };
 
-    Window_CTBIcon.prototype.iconScale = function() {
-        if (BattleManager._subject === this._battler) {
-            return 1.25;
-        }
-        return 1.0;
+    Window_CTBIcon.prototype.iconScale = function(battler) {
+        var timeline = BattleManager.timelineWindow();
+        //console.log("Timeline:", timeline);
+        if (!timeline) return 1.0;
+        var slot = timeline.slotForBattler(battler);
+        //console.log("Battler:", this._battler);
+        //console.log("Slot:", slot);
+        return (slot === 1) ? 1.25 : 1.0;
+        //if (BattleManager._subject === this._battler) return 1.25;
+        //return 1.0;
     };
 
     //=============================================================================
@@ -942,8 +1045,8 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBTimeline.prototype.currentInitiative = function() {
         var anchor = BattleManager._timelineAnchorInitiative;
-        console.log("Current initiative");
-        console.log("Anchor:", anchor);
+        //console.log("Current initiative");
+        //console.log("Anchor:", anchor);
         if (anchor !== undefined && anchor !== null) return anchor;
         var members = BattleManager.sortBattleMembers().filter(function(member) {
             return member && member.isAlive();
@@ -1285,7 +1388,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                     battler: battler,
                     action: battler.ctbActionPreview(),
                     initiative: battler.ctbPreviewInitiative(),
-                    activationOrder: battler._activationOrder || 0
+                    activationOrder: battler.previewActivationOrder()
                 });
             }
             BattleManager.addTimelineExtensionEntries(entries, battler);
