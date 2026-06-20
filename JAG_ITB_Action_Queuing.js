@@ -166,6 +166,8 @@
     };
 
     Scene_Battle.prototype.createActorCommandWindow = function() {
+        //console.log(new Error().stack);
+        //console.log("actor", this._actor);
         this._actorCommandWindow = new Window_ActorCommand();
         this._actorCommandWindow.setHandler("finishQueue", this.finishActionQueue.bind(this));
         this._actorCommandWindow.setHandler('attack', this.commandAttack.bind(this));
@@ -241,7 +243,7 @@
         var actor = BattleManager.actor();
         if (actor) {
             var previewAction = actor.nextQueuedAction();
-            actor.setCTBActionPreview(previewAction, false);
+            actor.setITBActionPreview(previewAction, false);
         }
     };
 
@@ -252,11 +254,11 @@
             var removed = actor.undoLastQueuedAction();
             if (removed) {
                 if (actor.queueLength() > 0) {
-                    var action = actor.ctbActionPreview();
+                    var action = actor.itbActionPreview();
                     if (!action) action = actor.currentAction();
-                    if (action) actor.setCTBActionPreview(action, false);
+                    if (action) actor.setITBActionPreview(action, false);
                 } else {
-                    actor.clearCTBActionPreview();
+                    actor.clearITBActionPreview();
                 }
                 this.requestTimelineRefresh("Previous Command");
                 actor._canUndoQueuedAction = false;
@@ -315,7 +317,7 @@
             }
             if (!iconIndex) continue;
             var y = this.actionY(i) + this.iconHeight();
-            var blinking = this._battler.isCTBPreviewBlinking() && (i === visibleIcons - 1);
+            var blinking = this._battler.isITBPreviewBlinking() && (i === visibleIcons - 1);
             if (blinking) {
                 this.contents.paintOpacity = this._blinkOpacity;
             }
@@ -337,7 +339,7 @@
         AQ_WCTBAI_updateRedraw.call(this);
         if (
             this._battler &&
-            this._battler.isCTBPreviewBlinking() &&
+            this._battler.isITBPreviewBlinking() &&
             this._battler.queueLength &&
             this._battler.queueLength() <= 1
         ) {
@@ -350,17 +352,8 @@
             this.drawTargetMiniIcon();
             this.contents.paintOpacity = 255;
         }
-        //if (!this._battler) return;
-        //if (this._iconIndex <= 0) return;
         this.drawQueuedActionIcons();
-        //if (this._battler && this._battler.isCTBPreviewBlinking()) this._redraw = true;
     };
-
-    /* Window_CTBActionIcon.prototype.hasTargetIcon = function() {
-        if (!this._battler) return false;
-        var action = this._battler._actions ? this._battler._actions[0] : null;
-        return !!action && action._targetIndex >= 0;
-    }; */
 
     var AQ_WCTBAI_drawTargetBackground = Window_CTBActionIcon.prototype.drawTargetBackground;
     Window_CTBActionIcon.prototype.drawTargetBackground = function() {
@@ -400,11 +393,9 @@
     };
 
     Window_CTBActionIcon.prototype.updateBlink = function() {
-        //console.log(this._blinkOpacity);
-        //console.log("Update blink frame", Graphics.frameCount);
         if (!this._battler) return;
         var opacity = 255;
-        if (this._battler.isCTBPreviewBlinking()) {
+        if (this._battler.isITBPreviewBlinking()) {
             opacity = Graphics.frameCount % 48 < 32 ? 255 : 0;
         }
         if (opacity !== this._blinkOpacity) {
@@ -413,26 +404,26 @@
         }
     };
 
-    Game_Battler.prototype.setCTBActionPreview = function(action, blink) {
+    Game_Battler.prototype.setITBActionPreview = function(action, blink) {
         var queuedAction = this.nextQueuedAction();
         if (queuedAction) {
-            this._ctbActionPreview = queuedAction;
+            this._itbActionPreview = queuedAction;
         } else {
-            this._ctbActionPreview = action;
+            this._itbActionPreview = action;
         }
         if (blink === undefined) {
             blink = true;
         }
-        this._ctbPreviewBlink = blink;
+        this._itbPreviewBlink = blink;
     };
 
-    Game_Battler.prototype.clearCTBActionPreview = function() {
-        this._ctbActionPreview = null;
-        this._ctbPreviewBlink = false;
+    Game_Battler.prototype.clearITBActionPreview = function() {
+        this._itbActionPreview = null;
+        this._itbPreviewBlink = false;
     };
 
-    Game_Battler.prototype.isCTBPreviewBlinking = function() {
-        return !!this._ctbPreviewBlink;
+    Game_Battler.prototype.isITBPreviewBlinking = function() {
+        return !!this._itbPreviewBlink;
     };
 
 })();

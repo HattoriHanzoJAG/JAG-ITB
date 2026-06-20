@@ -26,11 +26,11 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     const TRACE_ITB = true;
     const DEBUG_ITB = false;
-    const DEBUG_Timeline = true;
+    const DEBUG_Timeline = false;
 
-    var _DataManager_isDatabaseLoaded = DataManager.isDatabaseLoaded;
+    var JAG_DM_isDatabaseLoaded = DataManager.isDatabaseLoaded;
     DataManager.isDatabaseLoaded = function() {
-	if (!_DataManager_isDatabaseLoaded.call(this)) return false;
+	if (!JAG_DM_isDatabaseLoaded.call(this)) return false;
 	if (!this._initiativeNotetagsLoaded) {
 	    this.processInitiativeNotetag($dataSkills);
 	    this.processInitiativeNotetag($dataItems);
@@ -84,7 +84,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                 this.setCTBCharge(0);
                 this._initiative += item.initiative;
                 this.updateActivationOrder();
-                this.clearCTBActionPreview();
+                this.clearITBActionPreview();
                 BattleManager.requestTimelineRefresh("Setup Charge");
                 if (DEBUG_ITB) console.log("New initiative:", this._initiative);
             } else {
@@ -178,7 +178,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         return true;
     };
 
-    var _BattleManager_startCTBInput = BattleManager.startCTBInput;
+    var JAG_BM_startCTBInput = BattleManager.startCTBInput;
     BattleManager.startCTBInput = function(battler) {
         if (TRACE_ITB || DEBUG_ITB) console.log("=== START CTB INPUT === I", battler._initiative);
         if (DEBUG_ITB) {
@@ -189,11 +189,11 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             console.log("Battler is enemy:", battler.isEnemy());
             console.log("Battler can input:", battler.canInput());
         }
-        _BattleManager_startCTBInput.call(this, battler);
+        JAG_BM_startCTBInput.call(this, battler);
         BattleManager.requestTimelineRefresh("Start Input");
     };
 
-    Yanfly.CTB.BattleManager_selectNextCommand = BattleManager.selectNextCommand;
+    var JAG_BM_selectNextCommand = BattleManager.selectNextCommand;
     BattleManager.selectNextCommand = function() {
         if (TRACE_ITB || DEBUG_ITB) console.log("SELECT NEXT COMMAND: Initiative CTB System");
         if (DEBUG_ITB) {
@@ -225,13 +225,13 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             this.setCTBPhase();
           }
         } else {
-          Yanfly.CTB.BattleManager_selectNextCommand.call(this);
+            JAG_BM_selectNextCommand.call(this);
         }
     };
 
-    var _Game_Action_executeHpDamage = Game_Action.prototype.executeHpDamage;
+    var JAG_GA_executeHpDamage = Game_Action.prototype.executeHpDamage;
     Game_Action.prototype.executeHpDamage = function(target, value) {
-        _Game_Action_executeHpDamage.call(this, target, value);
+        JAG_GA_executeHpDamage.call(this, target, value);
         if (TRACE_ITB || DEBUG_ITB) {
             console.log(" ");
             console.log("=== EXECUTE HP DAMAGE ===");
@@ -279,7 +279,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 	    return this._initiative || 0;
     };
 
-    Game_Battler.prototype.ctbWaitInitiative = function() {
+    Game_Battler.prototype.itbWaitInitiative = function() {
         var own = this.initiative || 0;
         var battlers = BattleManager.allBattleMembers().filter(function(b) {
             return b && b.isAlive() && b !== this;
@@ -315,15 +315,15 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }, this);
     };
 
-    var _BM_startBattle = BattleManager.startBattle;
+    var JAG_BM_startBattle = BattleManager.startBattle;
     BattleManager.startBattle = function() {
-        _BM_startBattle.call(this);
+        JAG_BM_startBattle.call(this);
         this.initializeActivationOrder();
     };
 
-    var _BM_onCTBStart = Game_Battler.prototype.onCTBStart;
+    var JAG_BM_onCTBStart = Game_Battler.prototype.onCTBStart;
         Game_Battler.prototype.onCTBStart = function() {
-        _BM_onCTBStart.call(this)
+        JAG_BM_onCTBStart.call(this)
         if (TRACE_ITB || DEBUG_ITB) {
             console.log(" ");
             console.log("==== ON CTB START ====");
@@ -332,7 +332,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         BattleManager._timelineVersion = 0;
     };  
 
-    var _BM_endAction = BattleManager.endAction;
+    var JAG_BM_endAction = BattleManager.endAction;
     BattleManager.endAction = function() {
 	    var subject = this._subject;
         if (TRACE_ITB || DEBUG_ITB) {
@@ -341,14 +341,13 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             if (DEBUG_ITB) console.log(subject.name());
         }
         BattleManager.ctbTicksToReadyClear();
-        //if (subject) this._showCTBActionIcon = false;
-        _BM_endAction.call(this)
+        JAG_BM_endAction.call(this)
         if (DEBUG_ITB) this.debugState();
     };  
 
-    var _BM_startAction = BattleManager.startAction;
+    var JAG_BM_startAction = BattleManager.startAction;
     BattleManager.startAction = function() {
-        _BM_startAction.call(this)
+        JAG_BM_startAction.call(this)
         if (TRACE_ITB || DEBUG_ITB)  {
             console.log(" ");
             console.log("==== START ACTION ====");
@@ -356,7 +355,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }
     };
 
-    var _BM_startCTBAction = BattleManager.startCTBAction;
     BattleManager.startCTBAction = function(battler) {
         if (TRACE_ITB || DEBUG_ITB) {
             console.log(" ");
@@ -368,7 +366,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         if (action && action.isValid()) {
             this.startAction();
         } else {
-            var wait = battler.ctbWaitInitiative();
+            var wait = battler.itbWaitInitiative();
             //console.log("INVALID ACTION:", battler.name(), "WAITS", wait);
             battler._initiative += wait;
             battler.clearActions();
@@ -402,7 +400,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this._timelineVersion++;
     };
 
-    //var _SB_commandAttack = Scene_Battle.prototype.commandAttack;
     Scene_Battle.prototype.commandAttack = function() {
         if (TRACE_ITB || DEBUG_ITB) console.log("COMMAND ATTACK");
         var actor = BattleManager.actor();
@@ -414,46 +411,41 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             console.log("Item:", action.item());
         }
         if (actor && action.item()) {
-            actor.setCTBActionPreview(action);
+            actor.setITBActionPreview(action);
             BattleManager.requestTimelineRefresh("Select Attack");
         }
         this.selectEnemySelection();
     };
 
-    var _SB_onSelectAction = Scene_Battle.prototype.onSelectAction;
+    var JAG_SB_onSelectAction = Scene_Battle.prototype.onSelectAction;
     Scene_Battle.prototype.onSelectAction = function() {
         var actor = BattleManager.actor();
         var action = BattleManager.inputtingAction();
         if (actor && action && action.item()) {
-            actor.setCTBActionPreview(action);
+            actor.setITBActionPreview(action);
             BattleManager.requestTimelineRefresh("Select Skill");
         }
-        _SB_onSelectAction.call(this);
+        JAG_SB_onSelectAction.call(this);
     };
 
     var JAG_CTB_update = Window_CTBIcon.prototype.update;
     Window_CTBIcon.prototype.update = function() {
         JAG_CTB_update.call(this);
         this.updateSize();
-        //if (this._needsResize) {
-            //console.log("Needs resize:", this._needsResize);
-            //this.resizeForBattler();
-            //this._needsResize = false;
-            //if (icon._redraw) icon.createContents();
-        //}
     };
 
-    var _CTB_updateRedraw = Window_CTBIcon.prototype.updateRedraw;
+    var JAG_CTB_updateRedraw = Window_CTBIcon.prototype.updateRedraw;
     Window_CTBIcon.prototype.updateRedraw = function() {
-        _CTB_updateRedraw.call(this);
+        JAG_CTB_updateRedraw.call(this);
         this.redrawInitiative();
     };
 
     Window_CTBIcon.prototype.redrawInitiative = function() {
-        if (!this._battler) return;
-        var value = this._battler.initiative || this._battler.ctbTicksToReady() || 0;
+        var battler = this._battler;
+        if (!battler) return;
+        var value = battler.initiative || battler.ctbTicksToReady() || 0;
 	    var y = this.contents.height - this.lineHeight() + 12;
-        this.contents.fontSize = Math.floor(17 * Math.sqrt(this.iconScale(this._battler)));
+        this.contents.fontSize = Math.floor(17 * Math.sqrt(this.iconScale(battler)));
         this.changeTextColor(this.textColor(6));
         this.drawText(
             value,
@@ -477,37 +469,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this.contentsOpacity = 0;
         this._lastTimelineVersion = -1;
     };
-
-    /* Window_CTBIcon.prototype.updateBattler = function() {
-        var changed = this._battler !== this._mainSprite._battler;
-        if (this._battler && this._battler._ctbTransformed) changed = true;
-        if (!changed) return;
-        this._battler = this._mainSprite._battler;
-        if (!this._battler) return this.removeCTBIcon();
-        this._battler._ctbTransformed = undefined;
-        this._iconIndex = this._battler.ctbIcon();
-        this._needsResize = true;
-        if (this._iconIndex > 0) {
-        this._image = ImageManager.loadSystem('IconSet');
-        } else if (this._battler.isEnemy()) {
-        if (this.isUsingSVBattler()) {
-            var name = this._battler.svBattlerName();
-            this._image = ImageManager.loadSvActor(name);
-        } else {
-            var battlerName = this._battler.battlerName();
-            var battlerHue = this._battler.battlerHue();
-            if ($gameSystem.isSideView()) {
-            this._image = ImageManager.loadSvEnemy(battlerName, battlerHue);
-            } else {
-            this._image = ImageManager.loadEnemy(battlerName, battlerHue);
-            }
-        }
-        } else if (this._battler.isActor()) {
-        var faceName = this._battler.faceName();
-        this._image = ImageManager.loadFace(faceName);
-        }
-        this._redraw = true;
-    }; */
 
     Window_CTBIcon.prototype.destinationY = function() {
         var timeline = BattleManager.timelineWindow();
@@ -535,9 +496,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
 
     Window_CTBIcon.prototype.redrawEnemy = function() {
-        if (this.isUsingSVBattler()) {
-          return this.redrawSVEnemy();
-        };
+        if (this.isUsingSVBattler()) return this.redrawSVEnemy();
         var bitmap = this._image;
         var sw = bitmap.width;
         var sh = bitmap.height;
@@ -601,15 +560,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         if (battler.isDead()) return;
         var timeline = BattleManager.timelineWindow();
         if (!timeline) return;
-        //var initiative = this._battler.initiative || this._battler.ctbTicksToReady() || 0;
         var slot = timeline.slotForBattler(battler);
         this._destinationX = timeline.x + timeline.slotCenterX(slot - 1) - this.width/10 - 2;
-        //console.log("Destination X:", this._destinationX);
         if (slot === 1) this._destinationX -= Math.floor(this.iconWidth() * (this.iconScale(battler) - 1));
-            //console.log("Scale:", this.iconScale(battler));
-            //console.log("Delta X:", Math.floor(this.iconWidth() * (this.iconScale(battler) - 1)));
-            //console.log("Destination X:", this._destinationX);
-        //}
     };
 
     Window_CTBIcon.prototype.updateSize = function() {
@@ -624,32 +577,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this._redraw = true;
     };
 
-    /* Window_CTBIcon.prototype.resizeForBattler = function() {
-        var scale = this.iconScale();
-        //console.log("Scale:", scale);
-        //var width = Math.floor(this.iconWidth() * scale) + 8 + this.standardPadding() * 2;
-        //var height = Math.floor(this.iconHeight() * scale) + 14 + this.standardPadding() * 2;
-        //this.contents.resize(this.width - this.standardPadding() * 2,
-        //                    this.height - this.standardPadding() * 2);
-        //this._redraw = true;
-        if (scale > 1.0) {
-            var wb = this.iconWidth();
-            var hb = this.iconHeight();
-            var sp = this.standardPadding() * 2;
-            var w = Math.floor(wb * scale) + 8 + sp;
-            var h = Math.floor(hb * scale) + 14 + sp;
-            //var dx = Math.floor(wb * scale) - wb;
-            //var dy = Math.floor(hb * scale) - hb;
-            //console.log("dx", dx);
-            //console.log("dy", dy);
-            //console.log("wb", wb);
-            //console.log("hb", hb);
-            this.move(this.x, this.y, w, h);
-            this.createContents();
-            //this._redraw = true;
-        }
-    }; */
-
     Window_CTBIcon.prototype.iconWidth = function() {
         var timelineWidth = Graphics.boxWidth - BattleManager.timelineMargin() - 80;
         return Math.floor(timelineWidth/ BattleManager.timelineSlotCount()) - 6;
@@ -661,14 +588,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBIcon.prototype.iconScale = function(battler) {
         var timeline = BattleManager.timelineWindow();
-        //console.log("Timeline:", timeline);
         if (!timeline) return 1.0;
         var slot = timeline.slotForBattler(battler);
-        //console.log("Battler:", this._battler);
-        //console.log("Slot:", slot);
         return (slot === 1) ? 1.25 : 1.0;
-        //if (BattleManager._subject === this._battler) return 1.25;
-        //return 1.0;
     };
 
     //=============================================================================
@@ -713,7 +635,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBActionIcon.prototype.updateActionIcon = function() {
         if (!this._battler) return;
-        var preview = this._battler.ctbActionPreview();
+        var preview = this._battler.itbActionPreview();
         var changed = 
             this._iconIndex !== this._battler.ctbActionIcon() || 
             this._previewState !== preview;
@@ -742,9 +664,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }
     };
 
-    Window_CTBActionIcon.prototype.forceRedraw = function() {
-        this._redraw = true;
-    };
+    //Window_CTBActionIcon.prototype.forceRedraw = function() {
+    //    this._redraw = true;
+    //};
 
     Window_CTBActionIcon.prototype.updateRedraw = function() {
         if (!this._redraw) return;
@@ -770,7 +692,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this.drawActionBorder();
         this.drawActionIcon(this._iconIndex, 2, 20);
         if (this._previewState) {
-            //if (DEBUG_Timeline) console.log("Draw preview arrow");
             this.drawPreviewArrow("#F7E839");
         }
         this.drawTargetBackground();
@@ -809,7 +730,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBActionIcon.prototype.updatePosition = function() {
         if (!this._battler) return;
-        var preview = this._battler.ctbActionPreview();
+        var preview = this._battler.itbActionPreview();
         if(preview) {
             var timeline = BattleManager.timelineWindow();
             if (!timeline) return;
@@ -831,14 +752,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBActionIcon.prototype.targetBattler = function() {
         if (!this._battler) return null;
-        var action = this._battler.ctbActionPreview();
+        var action = this._battler.itbActionPreview();
         if (!action) action = this._battler.currentAction();
         if (!action) return null;
-        //console.log(
-        //    "TARGET TEST",
-        //    action,
-        //    action ? action._targetIndex : null
-        //);
         if (this._battler.isActor()) {
             var targetIndex = action._targetIndex;
             if (targetIndex === undefined || targetIndex === null || targetIndex < 0) return null;
@@ -872,17 +788,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         var size = 54;
         var x = this.contents.width - 3*size/4 - 1;
         var y = this.iconHeight() - 3*size/4 - 3;
-        this.contents.blt(
-            bitmap,
-            0,
-            0,
-            bitmap.width,
-            bitmap.height,
-            x,
-            y,
-            size,
-            size
-        );
+        this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x, y, size, size);
     };
 
     Window_CTBActionIcon.prototype.drawTargetMiniIcon = function() {
@@ -902,24 +808,16 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             var ph = Window_Base._faceHeight;
             var sx = (faceIndex % 4) * pw;
             var sy = Math.floor(faceIndex / 4) * ph;
-            this.contents.blt(
-                bitmap,
-                sx,
-                sy,
-                pw,
-                ph,
-                dx,
-                dy,
-                size,
-                size
-            );
+            this.contents.blt(bitmap, sx, sy, pw, ph, dx, dy, size, size);
         } else {
             var sw;
             var sh;
             if ($gameSystem.isSideView()) {
                 bitmap = ImageManager.loadSvEnemy(target.battlerName());
-                sw = bitmap.width / 9;
-                sh = bitmap.height / 6;
+                sw = bitmap.width;
+                sh = bitmap.height;
+                //sw = bitmap.width / 9;
+                //sh = bitmap.height / 6;
             } else {
                 bitmap = ImageManager.loadEnemy(
                     target.battlerName(),
@@ -933,18 +831,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             }
             if (!bitmap.isReady()) return;
             var dw = this.contents.width/2 - 2;
-            var dh = this.contents.height/2 - 2;
-            this.contents.blt(
-                bitmap,
-                0,
-                0,
-                sw,
-                sh,
-                dx,
-                dy - 2,
-                dw,
-                dh
-            );
+            var dh = sh * dw / Math.max(sw, 1);
+            //var dh = this.contents.height/2 - 2;
+            this.contents.blt(bitmap, 0, 0, sw, sh, dx, dy - 3, dw, dh);
         }
     };
 
@@ -986,9 +875,8 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
 
     Game_Battler.prototype.ctbActionIcon = function() {
-        //if (!this._showCTBActionIcon && this.isActor()) return 0;
         if (this.isEnemy() && !this.isCTBCharging()) return 0;
-        var action = this.ctbActionPreview();
+        var action = this.itbActionPreview();
         if (!action) action = this.currentAction();
         if (!action || !action.item()) return 0;
         return action.item().iconIndex;
@@ -1011,6 +899,16 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this._ctbActionIcon.setWindowLayer(scene._windowLayer);
         scene.addChild(this._ctbIcon);
         scene.addChild(this._ctbActionIcon);
+        scene.removeChild(this._ctbIcon);
+        scene.addChildAt(this._ctbIcon, 2);
+        scene.removeChild(this._ctbActionIcon);
+        scene.addChildAt(this._ctbActionIcon, 2);
+        //var layer = scene._windowLayer;
+        //layer.addChild(this._ctbIcon);
+        //layer.addChild(this._ctbActionIcon);
+        //var timelineIndex = layer.getChildIndex(scene._itbTimelineWindow);
+        //layer.setChildIndex(this._ctbIcon, Math.max(0, timelineIndex - 2));
+        //layer.setChildIndex(this._ctbActionIcon, Math.max(0, timelineIndex - 2));
     };
 
     Object.defineProperty(Game_Battler.prototype, 'initiative', {
@@ -1025,7 +923,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     //=============================================================================
 
     Window_CTBTimeline.prototype.initialize = function() {
-        //console.log("CTB Timeline Initialized");
         const width = Graphics.boxWidth;
         const height = 80;
         Window_Base.prototype.initialize.call(this, 0, 0, width, height);
@@ -1045,8 +942,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBTimeline.prototype.currentInitiative = function() {
         var anchor = BattleManager._timelineAnchorInitiative;
-        //console.log("Current initiative");
-        //console.log("Anchor:", anchor);
         if (anchor !== undefined && anchor !== null) return anchor;
         var members = BattleManager.sortBattleMembers().filter(function(member) {
             return member && member.isAlive();
@@ -1056,10 +951,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             return member.initiative || member.ctbTicksToReady() || 0;
         }));
     };   
-
-    //Window_CTBTimeline.prototype.initiativeToSlot = function(initiative) { 
-    //    return Math.floor((initiative - this.currentInitiative()) / this._scale);
-    //};
 
     Window_CTBTimeline.prototype.getTimelineScale = function(members) {
         const count = this.slotCount();
@@ -1092,13 +983,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         return BattleManager.timelineSlotCount();
     };
 
-    /* Window_CTBTimeline.prototype.initiativeToX = function(initiative) {
-        const stepSize = this.slotCount() * this._scale; // initiative per tick segment
-        const range = initiative - this.currentInitiative();
-        const timelineWidth = this.timelineRight() - this.timelineLeft();
-        return this.timelineLeft() + (range / stepSize) * timelineWidth;
-    }; */
-
     Window_CTBTimeline.prototype.redraw = function() {
         this.contents.clear();
         this.buildTimelineSlots();
@@ -1110,29 +994,14 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         var x = this.timelineLeft();
         var values = this.buildDisplayedInitiatives();
         for (var i = 0; i < this.slotCount(); i++) {
-            var width = (i === 0)
-                ? this.activeSlotWidth()
-                : this.slotWidth();
-            this.drawTrackSlot(
-                x,
-                18,
-                width,
-                28,
-                values[i],
-                i
-            );
+            var width = (i === 0) ? this.activeSlotWidth() : this.slotWidth();
+            this.drawTrackSlot(x, 18, width, 28, values[i], i);
             x += width;
         }
     };
 
     Window_CTBTimeline.prototype.drawTrackSlot = function(x, y, width, height, value, i) {
-        this.contents.fillRect(
-            x,
-            y,
-            width,
-            height + 1,
-            this.gaugeBackColor()
-        );
+        this.contents.fillRect(x, y, width, height + 1, this.gaugeBackColor());
         var xl = 0;
         var xr = 0;
         if (this._timelineSlots && i < this._timelineSlots.length - 1) {
@@ -1148,29 +1017,11 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                 xr += 2;
             };
         }
-        this.contents.fillRect(
-            x + 1 + xl,
-            y + 1,
-            width - 2 + xr,
-            height - 2,
-            "#F5A623"
-        );
-        this.contents.fillRect(
-            x + 3 + 2*xl,
-            y + 3,
-            width - 6 + 2*xr,
-            height - 6,
-            "#270909"
-        );
+        this.contents.fillRect(x + 1 + xl, y + 1, width - 2 + xr, height - 2, "#F5A623");
+        this.contents.fillRect(x + 3 + 2*xl, y + 3, width - 6 + 2*xr, height - 6, "#270909");
         if (xl === 0) {
             this.contents.fontSize = 17;
-            this.drawText(
-                value,
-                x,
-                y + 1,
-                width,
-                "center"
-            );
+            this.drawText(value, x, y + 1, width, "center");
         }
     };
 
@@ -1240,8 +1091,6 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                 grouped[visibleInitiative].forEach(function(entry) {
                     var slot = {};
                     for (var key in entry) slot[key] = entry[key];
-                    //slot.initiative = entry.initiative;
-                    //slot.battler = entry.battler || null;
                     slot.action = entry.action || null;
                     slots.push(slot);
                 });
@@ -1306,40 +1155,43 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         return 0;
     };
 
-    var _CTB_SceneBattle_createAllWindows = Scene_Battle.prototype.createAllWindows;
+    var JAG_WBL_initialize = Window_BattleLog.prototype.initialize;
+    Window_BattleLog.prototype.initialize = function() {
+        JAG_WBL_initialize.call(this);
+        // Display battle log messages below the timeline
+        this.y = 95;
+    };
+
+    var JAG_CTB_SceneBattle_createAllWindows = Scene_Battle.prototype.createAllWindows;
     Scene_Battle.prototype.createAllWindows = function() {
-        _CTB_SceneBattle_createAllWindows.call(this);
-        this.createCTBTimelineWindow();
+        JAG_CTB_SceneBattle_createAllWindows.call(this);
+        this.createITBTimelineWindow();
     };
 
-    Scene_Battle.prototype.createCTBTimelineWindow = function() {
-        this._ctbTimelineWindow = new Window_CTBTimeline();
-        this.addWindow(this._ctbTimelineWindow);
+    Scene_Battle.prototype.createITBTimelineWindow = function() {
+        this._itbTimelineWindow = new Window_CTBTimeline();
+        this.addWindow(this._itbTimelineWindow);
+        // Move the timeline behind window messages
+        this._windowLayer.removeChild(this._itbTimelineWindow);
+        this.addChildAt(this._itbTimelineWindow, 1);
     };
 
-    Game_Battler.prototype.setCTBActionPreview = function(action) {
-        if (DEBUG_Timeline) {
-            console.log(
-                "SET PREVIEW:", 
-                this.name(), 
-                action
-            );
-        }
-        this._ctbActionPreview = action;
-        //this._showCTBActionIcon = true;
+    Game_Battler.prototype.setITBActionPreview = function(action) {
+        if (DEBUG_Timeline) console.log("SET PREVIEW:", this.name(), action);
+        this._itbActionPreview = action;
     };
 
-    Game_Battler.prototype.ctbActionPreview = function() {
-        return this._ctbActionPreview;
+    Game_Battler.prototype.itbActionPreview = function() {
+        return this._itbActionPreview;
     };
 
-    Game_Battler.prototype.clearCTBActionPreview = function() {
+    Game_Battler.prototype.clearITBActionPreview = function() {
         if (DEBUG_Timeline) console.log("CLEAR PREVIEW:", this.name());
-        this._ctbActionPreview = null;
+        this._itbActionPreview = null;
     };
 
-    Game_Battler.prototype.ctbPreviewInitiative = function() {
-        var action = this._ctbActionPreview;
+    Game_Battler.prototype.itbPreviewInitiative = function() {
+        var action = this._itbActionPreview;
         //if (DEBUG_Timeline) console.log("PREVIEW INIT:", this.name(), this.initiative, action ? action.item().initiative : null);
         if (!action || !action.item()) return this.initiative;
         return this.initiative + (action.item().initiative || 0);
@@ -1348,7 +1200,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     BattleManager.timelineWindow = function() {
         var scene = SceneManager._scene;
         if (!scene) return null;
-        return scene._ctbTimelineWindow;
+        return scene._itbTimelineWindow;
     };
 
     BattleManager.buildTimelineEntries = function() {
@@ -1366,7 +1218,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                 initiative: battler.initiative || battler.ctbTicksToReady() || 0,
                 activationOrder: battler._activationOrder || 0
             });
-            var action = battler.ctbActionPreview();
+            var action = battler.itbActionPreview();
             if (DEBUG_Timeline && showlog) {
                 console.log(
                     "PREVIEW",
@@ -1380,23 +1232,23 @@ window.Window_CTBTimeline = Window_CTBTimeline;
                 if (DEBUG_Timeline && showlog) {
                     console.log(
                         "ADDING PREVIEW INITIATIVE",
-                        battler.ctbPreviewInitiative()
+                        battler.itbPreviewInitiative()
                     );
                 }
                 entries.push({
                     type: "preview",
                     battler: battler,
-                    action: battler.ctbActionPreview(),
-                    initiative: battler.ctbPreviewInitiative(),
+                    action: battler.itbActionPreview(),
+                    initiative: battler.itbPreviewInitiative(),
                     activationOrder: battler.previewActivationOrder()
                 });
             }
             BattleManager.addTimelineExtensionEntries(entries, battler);
             if (DEBUG_Timeline && showlog) {
                 console.log(
-                    battler.ctbActionPreview(),
-                    battler.ctbActionPreview() &&
-                    battler.ctbActionPreview().item()
+                    battler.itbActionPreview(),
+                    battler.itbActionPreview() &&
+                    battler.itbActionPreview().item()
                 );
             }
         });

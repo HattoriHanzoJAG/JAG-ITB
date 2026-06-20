@@ -31,7 +31,7 @@
 
 (function() {
 
-    const TRACE_CONNECTORS = false;
+    const TRACE_CONNECTORS = true;
     const DEBUG_CONNECTORS = false;
 
     //=============================================================================

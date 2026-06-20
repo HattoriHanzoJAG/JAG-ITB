@@ -76,33 +76,6 @@
         TE_GB_initMembers.call(this);
         this._ITBEvents = [];
     };
-
-    //--------------------------------------------------------------------------
-    // Helper API
-    //--------------------------------------------------------------------------
-
-    /* Game_Battler.prototype.addTimedState = function(stateId, applyOffset, duration) {
-        applyOffset = applyOffset || 0;
-        duration = duration || 0;
-        const now = this.initiative || 0;
-        if (!this._stateTiming) this._stateTiming = {};
-        this._stateTiming[stateId] = {
-            applyAt: now + applyOffset,
-            removeAt: now + applyOffset + duration
-        };
-    }; */
-
-    //--------------------------------------------------------------------------
-    // State valuation hook
-    //--------------------------------------------------------------------------
-
-    /* Game_Battler.prototype.isITBStateActive = function(stateId) {
-        if (!this.isStateAffected(stateId)) return false;
-        const timing = this._stateTiming?.[stateId];
-        if (!timing) return true;
-        const now = this.initiative || 0;
-        return now >= timing.applyAt && now < timing.removeAt;
-    }; */
     
     //--------------------------------------------------------------------------
     // Schedule the effect
@@ -114,21 +87,12 @@
         TE_GB_setupCTBCharge.call(this);
         const action = this.currentAction();
         if (!action) return;
-        //if (!action._ctbActionId) action._ctbActionId = BattleManager._nextCTBActionId++;
         const item = action.item();
         if (!item || !item.selfState) return;
         var skillId = item.id;
         this._ITBEvents = this._ITBEvents.filter(function(event) {
             return event.skillId === skillId;
         });
-        /* if (!action._ctbSelfstate) {
-            action._ctbSelfState = {
-                actionId: action._ctbActionId,
-                stateId: item.selfState.stateId,
-                offset: item.selfState.offset,
-                target: this
-            };
-        } */
         if (!item.selfState.offset || item.selfState.offset <= 0) {
             if (DEBUG_EVENTS) console.log("Add state:", item.selfState.stateId);
             this.addState(item.selfState.stateId);
@@ -137,18 +101,6 @@
                 console.log("States:", this._states);
             }
         } else {
-            /* var existing = this._ITBEvents.find(function(effect) {
-                return effect.stateId === item.selfState.stateId;
-            });
-            if (existing) {
-                if (DEBUG_EVENTS) {
-                    console.log("Event already exists:", item.selfState.stateId);
-                    console.log("State initiative before:", existing.triggerInitiative);
-                }
-                existing.triggerInitiative = initiative + item.selfState.offset;
-                existing.actionId = action._ctbActionId;
-                existing.action = action;
-            } else { */
             if (DEBUG_EVENTS) console.log("New event scheduled:", item.selfState.stateId);
             this._ITBEvents.push({
                 type: "selfState",
@@ -157,7 +109,6 @@
                 stateId: item.selfState.stateId,
                 triggerInitiative: initiative + item.selfState.offset
             });
-            //}
             console.log("ITB EVENTS:", this._ITBEvents);
             if (DEBUG_EVENTS) {
                 console.log("Battler:", this.name());
@@ -177,7 +128,7 @@
     //--------------------------------------------------------------------------
 
     BattleManager.findScheduledSelfState = function() {
-        console.log("Find Scheduled State");
+        if (DEBUG_EVENTS) console.log("Find Scheduled State");
         var current = this.currentInitiative();
         var next = null;
         this.sortBattleMembers().forEach(function(battler) {
@@ -190,23 +141,7 @@
             });
         });
         return next;
-        /* for (var i = 0; i < battlers.length; i++) {
-            var battler = battlers[i];
-            if (!battler || !battler._ITBEvents) continue;
-            for (var j = 0; j < battler._ITBEvents.length; j++) {
-                var event = battler._ITBEvents[j];
-                console.log("Event initiative:", event.triggerInitiative);
-                console.log("Current initiative:", current);
-                if (event.triggerInitiative <= current) return event;
-            }
-        }
-        return null; */
     };
-
-    /* Game_Battler.prototype.activateScheduledState = function(stateId) {
-        this.addState(stateId);
-        this.removeScheduledState(stateId);
-    }; */
 
     BattleManager.updateITBEvents = function() {
         var current = this.currentInitiative();
@@ -231,14 +166,6 @@
     BattleManager.getChargedCTBBattler = function() {
         this.updateITBEvents();
         return TE_BM_getChargedCTBBattler.call(this);
-    }; */
-
-    /* TE_BM_updateCTBPhase = BattleManager.updateCTBPhase;
-    BattleManager.updateCTBPhase = function() {
-        TE_BM_updateCTBPhase.call(this);
-        BattleManager.allBattleMembers().forEach(function(battler) {
-            if (battler) battler.updateITBEvents();
-        });
     }; */
 
     //--------------------------------------------------------------------------
@@ -303,177 +230,26 @@
         }, this);
     };
 
-    /* const TE_GB_removeState = Game_Battler.prototype.removeState;
-    Game_Battler.prototype.removeState = function(stateId) {
-        TE_GB_removeState.call(this. stateId);
-        this.cleanupITBEventsAfterStateRemoval();
-    };
-
-    Game_Battler.prototype.cleanupITBEventsAfterStateRemoval = function() {
-        if (!this._ITBEvents) return;
-        // remove orphaned events whose action no longer exists or is invalid
-        this._ITBEvents = this._ITBEvents.filter(function(event) {
-            if (!event.action) return false;
-            if (event.action._item === undefined) return false;
-            return true;
-        });
-    }; */
-
-    //--------------------------------------------------------------------------
-    // Update unscheduled effects
-    //--------------------------------------------------------------------------
-
-    /* Game_Battler.prototype.updateITBEvents = function() {
-        if (!this._ITBEvents) return;
-        for (let i = this._ITBEvents.length - 1; i >= 0; i--) {
-            const effect = this._ITBEvents[i];
-            if (DEBUG_EVENTS) {
-                console.log("Update event", effect);
-                console.log("Event initiative", effect.triggerInitiative);
-                console.log("Next battler initiative", BattleManager.currentInitiative());
-            }
-            if (BattleManager.currentInitiative() >= effect.triggerInitiative) {
-                BattleManager.requestSelfStateActivation(this, effect);
-                //this.addState(effect.stateId);
-                this._ITBEvents.splice(i, 1);
-                if (DEBUG_EVENTS) {
-                    console.log(
-                        "ITB EFFECT:",
-                        this.name(),
-                        "State",
-                        effect.stateId
-                    );
-                }
-            }
-        }
-    };
-
-    BattleManager.requestSelfStateActivation = function(battler, event) {
-        this._timelineSelfStateEvent = event;
-        this._timelineSelfStateBattler = battler;
-        this._timelineEventFrames = 30;
-        this._timelineEventActive = true;
-        //this.startTimelinePause();
-    }; */
-
     //--------------------------------------------------------------------------
     // Update timeline event
     //--------------------------------------------------------------------------
 
     BattleManager.updateTimelineEvent = function() {
-        //if (!this._timelineEventActive) return;
         this._timelineEventFrames--;
         this._timelineEventBlink++;
-        //if (this._timelineEventBlink >=8) {
-        //    this._timelineEventBlink = 0;
-        //    this._timelineEventVisible = !this._timelineEventVisible;
-        //    var timeline = this.timelineWindow();
-        //    if (timeline) timeline.refresh();
-        //}
         if (this._timelineEventFrames > 0) return;
         this._timelineEventActive = false;
         this._timelineAnchorInitiative = undefined;
         this.updateITBEvents();
         this.requestTimelineRefresh("Apply selfstate");
-        //this.executeTimelineEvent(this._scheduledState);
-        //this.finishTimelineEvent();
     };
-
-    //--------------------------------------------------------------------------
-    // Execute timeline event
-    //--------------------------------------------------------------------------
-
-    /* BattleManager.updateSelfStatePhase = function() {
-        this._selfStateTimer--;
-        if (this._selfStateTimer > 0) return;
-        this.activateScheduledState();
-    }; */
-
-    /* BattleManager.activateScheduledState = function() {
-        var slot = this._scheduledState;
-        if (!slot) return;
-        slot.battler.activateScheduledState(slot.stateId);
-        slot.battler._ITBEvents = slot.battler._ITBEvents.filter(function(event) {
-            return event.stateId !== slot.stateId;
-        });
-        this._scheduledState = null;
-        this._phase = "action";
-    }; */
-    
-    /* BattleManager.executeTimelineEvent = function(slot) {
-        if (slot) {
-            var battler = slot.battler;
-            battler.activateScheduledState(slot.stateId);
-        }
-        this.finishTimelineEvent();
-    }; */
-
-    //--------------------------------------------------------------------------
-    // Clear timeline event
-    //--------------------------------------------------------------------------
-
-    /* BattleManager.finishTimelineEvent = function() {
-        this._timelineEventActive = false;
-        //this._timelineEventInitiative = null;
-        //this._timelineEventBlink = 0;
-        this._scheduledState = null;
-        this._timelineEventFrames = 0;
-        this._timelineAnchorInitiative = undefined;
-        var timeline = this.timelineWindow();
-        if (timeline) this.requestTimelineRefresh("Timeline Event");
-    }; */
-
-    //--------------------------------------------------------------------------
-    // Detect timeline event activation
-    //--------------------------------------------------------------------------
-
-    /* const TE_BM_endCTBAction = BattleManager.endCTBAction;
-    BattleManager.endCTBAction = function() {
-        //if (this.checkTimelineEvents()) return;
-        TE_BM_endCTBAction.call(this);
-        if (!this._timelineEventActive) {
-            this.updateITBEvents();
-            //this.requestTimelineRefresh("Update ITB Event");
-        }
-    }; */
-    /* const TE_BM_startCTBInput = BattleManager.startCTBInput;
-    BattleManager.startCTBInput = function(battler) {
-        //if (this.checkTimelineEvents()) return;
-        TE_BM_startCTBInput.call(this, battler);
-        if (!this._timelineEventActive) {
-            this.updateITBEvents();
-            //this.requestTimelineRefresh("Update ITB Event");
-        }
-    }; */
-
-    /* const JAG_BM_endCTBAction = BattleManager.endCTBAction;
-    BattleManager.endCTBAction = function() {
-        var event = this.findScheduledSelfState();
-        if (event) {
-            this.startTimelineEvent(event);
-            return;
-        }
-        JAG_BM_endCTBAction.call(this);
-    }; */
-
-    /* BattleManager.checkTimelineEvents = function() {
-        var timeline = this.timelineWindow();
-        if (!timeline) return false;
-        var slots = timeline._timelineSlots;
-        if (!slots | slots.length === 0) return false;
-        var slot = slots[0];
-        if (!slot) return false;
-        if (slot.type !== "selfState") return false;
-        this.startTimelineEvent(slot);
-        return true;
-    }; */
 
     //--------------------------------------------------------------------------
     // Visual Pause
     //--------------------------------------------------------------------------
 
     BattleManager.startTimelineEvent = function(slot) {
-        console.log("Start Timeline Event");
+        if (DEBUG_EVENTS) console.log("Start Timeline Event");
         if (!slot) return;
         console.log("Slot", slot);
         this._timelineEventActive = true;
@@ -491,32 +267,6 @@
         if (this.isTimelineEventBusy()) return true;
         return TE_BM_isBusy.call(this);
     }
-
-    /* BattleManager.startTimelineEvent = function(slot) {
-        console.log("Start Timeline Event");
-        console.log("Slot", slot);
-        this._timelineEventActive = true;
-        //this._phase = "selfState";
-        this._scheduledState = slot;
-        this._timelineAnchorInitiative = slot.triggerInitiative;
-        console.log("Initiative", this._timelineAnchorInitiative);
-        this._timelineEventFrames = 60;
-        var timeline = this.timelineWindow();
-        if (timeline) this.requestTimelineRefresh("Timeline Event");
-    }; */
-
-    //--------------------------------------------------------------------------
-    // Synchronizing disappearance
-    //--------------------------------------------------------------------------
-
-    /* Game_Battler.prototype.consumeScheduledSelfState = function() {
-        var state = this._scheduledState;
-        this._scheduledState = null;
-        this._ITBEvents = this._ITBEvents.filter(function(event) {
-                return event.stateId !== state.stateId;
-            });
-        return state;
-    }; */
 
     //--------------------------------------------------------------------------
     // Damage debug hook
@@ -544,8 +294,6 @@
     BattleManager.update = function() {
         if (this._timelineEventActive) {
             this.updateTimelineEvent();
-            //this.updateITBEvents();
-            //this.requestTimelineRefresh("Update ITB Event");
             return
         }
         TE_BM_update.call(this);
@@ -572,14 +320,12 @@
             console.log(
                 "TIMELINE EXTENSION",
                 battler.name(),
-                battler.ctbActionPreview()
+                battler.itbActionPreview()
             );
         }
         TE_BM_addTimelineExtensionEntries.call(this, entries, battler);
-        //var previews = battler._ctbStatePreviews;
-        //if (!previews || previews.length <= 0) return;
         // Preview selfstate
-        var action = battler.ctbActionPreview();
+        var action = battler.itbActionPreview();
         if (DEBUG_EVENTS) console.log("Action:", action);
         if (action && action.item() && action.item().selfState) {
             if (DEBUG_EVENTS) {
@@ -590,7 +336,6 @@
                     action.item() ? action.item().selfState : null
                 );
             }
-            //if (battler.currentAction() && action === battler.currentAction()) return;
             var selfState = battler.previewSelfState();
             if (!selfState) return;
             if (DEBUG_EVENTS) {
@@ -661,13 +406,9 @@
         return null;
     };
 
-    /* JAG_Window_CTBTimeline_currentInitiative = Window_CTBTimeline.prototype.currentInitiative;
-    Window_CTBTimeline.prototype.currentInitiative = function() {
-        if (BattleManager._timelineEventInitiative) {
-            return BattleManager._timelineEventInitiative;
-        }
-        return JAG_Window_CTBTimeline_currentInitiative.call(this);
-    }; */
+    //=============================================================================
+    // Window_CTBActionIcon
+    //=============================================================================
 
     var TE_CTBAI_init = Window_CTBActionIcon.prototype.initialize;
     Window_CTBActionIcon.prototype.initialize = function(mainSprite) {
@@ -679,49 +420,6 @@
         this._statePreviewWindow = new Window_CTBActionIconStatePreview(this);
         this.addChild(this._statePreviewWindow);
     };
-
-    /* Window_CTBActionIcon.prototype.drawPreviewSelfState = function() {
-        //console.log("DRAW PREVIEW SELFSTATE");
-        if (!this._battler) return;
-        var selfState = this._battler.previewSelfState();
-        if (!selfState) return;
-        //console.log("Selfstate:", selfState);
-        var state = $dataStates[selfState.stateId];
-        if (!state) return;
-        //console.log("State:", state);
-        var iconIndex = state.iconIndex;
-        if (!iconIndex) return;
-        //console.log("Icon index:", iconIndex);
-        var timeline = BattleManager.timelineWindow();
-        if (!timeline) return;
-        // Action slot position (anchor)
-        var actionInit = this._battler.ctbPreviewInitiative();
-        //console.log("Action Init:", actionInit);
-        if (!actionInit) return;
-        // Selfstate slot position
-        var stateInit = selfState.initiative;
-        //console.log("State Init:", stateInit);
-        // convert into timeline space
-        var actionX = timeline.initiativeToX(actionInit);
-        var stateX = timeline.initiativeToX(stateInit);
-        //console.log("Initiative:", initiative);
-        // Relative offset inside action icon window
-        var x = stateX - actionX; //timeline.initiativeToX(initiative);
-        var y = 20;
-        if (this._battler.isCTBPreviewBlinking()) {
-            this.contents.paintOpacity = this._blinkOpacity;
-        }
-        //console.log("X-coordinate:", x);
-        this.drawActionBorderAt(x - 3, y - 3, "#66CCFF");
-        this.drawActionIcon(iconIndex, x, y);
-        this.contents.paintOpacity = 255;
-    };
-
-    var TE_WCTBAI_updateRedraw = Window_CTBActionIcon.prototype.updateRedraw;
-    Window_CTBActionIcon.prototype.updateRedraw = function() {
-        TE_WCTBAI_updateRedraw.call(this);
-        this.drawPreviewSelfState();
-    }; */
 
     Window_CTBActionIcon.prototype.previewSelfState = function() {
         if (!this._battler) return null;
@@ -739,6 +437,10 @@
         TE_CTBAI_updateBlink.call(this);
     };
 
+    //=============================================================================
+    // Window_CTBActionIconStatePreview
+    //=============================================================================
+
     function Window_CTBActionIconStatePreview(parent) {
         this.initialize.apply(this, arguments);
     };
@@ -748,7 +450,6 @@
 
     Window_CTBActionIconStatePreview.prototype.initialize = function(parent) {
         this._parent = parent;
-        //console.log("STATE WINDOW INITIALIZE:", parent);
         this._isStatePreviewWindow = true;
         Window_CTBActionIcon.prototype.initialize.call(this, parent._mainSprite);
         this.opacity = 0;
@@ -759,18 +460,10 @@
         var battler = this._parent._battler;
         if (!battler) return;
         var timelineState = battler.currentTimelineState();
-        //if (!this._timelineState || timelineState !== this._timelineState) {
-        //    console.log("Timeline state:", timelineState);
-        //}
         if (!timelineState) {
             this.visible = false;
             return;
         }
-        //if (!this._timelineType || timelineState.type !== this._timelineType) {
-        //    console.log("Type:", timelineState.type);
-        //    console.log("Timeline state:", timelineState);
-        //    this._timelineType = timelineState.type;
-        //}
         var timeline = BattleManager.timelineWindow();
         if (!timeline) return;
         var stateSlot = this.findStatePreviewSlot(battler);
@@ -779,13 +472,6 @@
         } else {
             var actionSlot = timeline.slotForBattler(battler);
         }
-        //if (!this._stateSlot || !this._actionSlot || 
-        //    (stateSlot !== this._stateSlot && actionSlot !== this._actionSlot)) {
-        //    console.log("State slot:", stateSlot);
-        //    console.log("Action slot:", actionSlot);
-        //    this._stateSlot = stateSlot;
-        //    this._actionSlot = actionSlot;
-        //}
         if (stateSlot === undefined || actionSlot === undefined) return;
         var stateX = timeline.slotCenterX(stateSlot);
         var actionX = timeline.x + timeline.slotCenterX(actionSlot);
@@ -795,7 +481,6 @@
     };
 
     Window_CTBActionIconStatePreview.prototype.update = function() {
-        //console.log("STATE WINDOW UPDATE");
         Window_CTBActionIcon.prototype.update.call(this);
         this.updatePosition();
         this.refresh();
@@ -803,7 +488,6 @@
     };
 
     Window_CTBActionIconStatePreview.prototype.refresh = function() {
-        //console.log("STATE WINDOW REFRESH");
         this.contents.clear();
         var battler = this._parent._battler;
         if (!battler) return;
@@ -812,14 +496,11 @@
         if (timelineState.type === "statePreview") {
             var queue = battler._actionQueue;
             if (!queue || queue.length <= 1) {
-                var blinking = this._battler.isCTBPreviewBlinking();
+                var blinking = this._battler.isITBPreviewBlinking();
                 if (blinking) this.contents.paintOpacity = this._blinkOpacity;
             }
             this.drawPreviewArrow("#66CCFF");
         } else if (BattleManager._timelineEventActive) {
-            //if (!BattleManager._timelineEventVisible) return;
-            //var visible = Math.floor(BattleManager._timelineEventBlink / 8) % 2 === 0;
-            //if (!visible) return;
             this.contents.paintOpacity = this._blinkOpacity;
         }
         var state = $dataStates[timelineState.stateId];
@@ -841,8 +522,6 @@
         if (!battler) return null;
         var timelineState = battler.currentTimelineState();
         if (!timelineState) return Window_CTBActionIcon.prototype.targetBattler();
-        //var selfState = battler.previewSelfState();
-        //if (!selfState) return Window_CTBActionIcon.prototype.targetBattler();
         return timelineState.battler;
     };
 
@@ -859,13 +538,6 @@
         } else {
             var selfState = battler.scheduledSelfState(type);
         }
-        //console.log("Timeline state:", timelineState);
-        //console.log("Type:", timelineState.type);
-        //if (!this._stateType || type !== this._stateType) {
-        //    console.log("SELFSTATE", selfState);
-        //    console.log("Type:", type);
-        //    this._stateType = type;
-        //}
         if (!selfState) return 0;
         for (var i = 0; i < timeline._timelineSlots.length; i++) {
             var slot = timeline._timelineSlots[i];
@@ -873,7 +545,6 @@
                 slot.battler === battler &&
                 slot.stateId === selfState.stateId
             ) {
-                //console.log("Slot found:", i + 1);
                 return i + 1;
             }
         }
@@ -887,7 +558,7 @@
     };
 
     Game_Battler.prototype.previewSelfState = function() {
-        var action = this.ctbActionPreview();
+        var action = this.itbActionPreview();
         //return this._battler.previewSelfState();
         if (!action) return null;
         var item = action.item();
@@ -901,14 +572,6 @@
     };
 
     Game_Battler.prototype.scheduledSelfState = function(type) {
-        //if (!Window_CTBActionIconStatePreview._stateType || 
-        //    type !== Window_CTBActionIconStatePreview._stateType) {
-        //    console.log("=== SCHEDULED SELF STATE ===");
-        //    console.log("ITB Events", JSON.stringify(this._ITBEvents, null, 2));
-        //    for (var i = 0; i < this._ITBEvents.length; i++) {
-        //        console.log("Event", i, this._ITBEvents[i]);
-        //    }
-        //}
         if (!this._ITBEvents || this._ITBEvents.length <= 0) return null;
         var event = this._ITBEvents.find(function(event) {return event.type === "selfState"});
             if (!event) return null;
