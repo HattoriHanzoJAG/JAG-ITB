@@ -344,6 +344,7 @@
             this._battler.queueLength() <= 1
         ) {
             this.contents.paintOpacity = this._blinkOpacity;
+            //console.log("Blink opacity:", this._blinkOpacity);
             this.contents.clear();
             this.drawActionBorder();
             this.drawActionIcon(this._iconIndex, 2, 20);
@@ -393,12 +394,16 @@
     };
 
     Window_CTBActionIcon.prototype.updateBlink = function() {
-        if (!this._battler) return;
+        //console.log("Update blink for battler", this._battler);
+        //console.log("FRAME", Graphics.frameCount);
+        //if (!this._battler) return;
         var opacity = 255;
-        if (this._battler.isITBPreviewBlinking()) {
+        if (!this._battler || this._battler.isITBPreviewBlinking()) {
+            //console.log("Preview blinking", this._battler.isITBPreviewBlinking());
             opacity = Graphics.frameCount % 48 < 32 ? 255 : 0;
         }
         if (opacity !== this._blinkOpacity) {
+            //console.log("Redraw blinking", opacity);
             this._blinkOpacity = opacity;
             this._redraw = true;
         }
