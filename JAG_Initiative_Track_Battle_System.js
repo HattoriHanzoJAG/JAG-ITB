@@ -421,7 +421,9 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     Scene_Battle.prototype.onSelectAction = function() {
         var actor = BattleManager.actor();
         var action = BattleManager.inputtingAction();
+        console.log("On select action", action);
         if (actor && action && action.item()) {
+            console.log("Timeline refresh for", actor);
             actor.setITBActionPreview(action);
             BattleManager.requestTimelineRefresh("Select Skill");
         }
@@ -598,6 +600,8 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     //=============================================================================
 
     Window_CTBActionIcon.prototype.initialize = function(mainSprite) {
+        //console.log("Initialize main sprite", mainSprite);
+        //console.log(new Error().stack);
         this._mainSprite = mainSprite;
         var width = this.iconWidth() + 20 + this.standardPadding() * 2;
         var height = this.windowHeight();
@@ -1178,6 +1182,10 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Game_Battler.prototype.setITBActionPreview = function(action) {
         if (DEBUG_Timeline) console.log("SET PREVIEW:", this.name(), action);
+        if (!action || !action.item()) {
+            this.clearITBActionPreview();
+            return;
+        }
         this._itbActionPreview = action;
     };
 

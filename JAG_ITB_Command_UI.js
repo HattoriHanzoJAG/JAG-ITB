@@ -15,6 +15,10 @@
     // Set Mode
     //--------------------------------------------------------------------------
 
+    Window_ActorCommand.prototype.setActionMode = function(mode) {
+        BattleManager.ITB_UI.setActionMode(mode);
+    };
+
     BattleManager.ITB_UI.setActionMode = function(mode) {
         this._actionMode = mode;
     };
@@ -60,9 +64,22 @@
     // Discipline rows
     //--------------------------------------------------------------------------
 
-    BattleManager.ITB_UI.getDisciplineRows = function(actor, target) {
+    BattleManager.ITB_UI.getDisciplineRows = function() {
+        console.log("Get Discipline Rows", this._actionMode);
+        var actor = BattleManager.actor();
         if (!actor) return [];
+        var target = actor._connectorPreviewTarget || BattleManager.ITB_UI.getCurrentTarget();
+        if (this._actionMode === "items") {
+            rows = BattleManager.ITB_UI.getItemRows(actor, target);
+        } else {
+            rows = BattleManager.ITB_UI.getSkillRows(actor, target);
+        }
+        return rows;
+    };
+        
+    BattleManager.ITB_UI.getSkillRows = function(actor, target) {
         var result = {};
+        console.log("Get Skill Rows");
         actor.skills().forEach(skill => {
             var discipline = ($dataSystem.skillTypes[skill.stypeId] || "Combat").toLowerCase();
             if (!result[discipline]) {result[discipline] = []};
@@ -73,7 +90,7 @@
                 iconIndex: skill.iconIndex,
                 discipline: discipline,
                 enabled: actor.canUse(skill),
-                selectable: BattleManager.ITB_UI.isActionSelectable(actor, skill, target),
+                selectable: BattleManager.ITB_UI.isActionSelectable(actor, skill),
                 isBasic: 
                     skill.name === TextManager.attack || 
                     skill.name === TextManager.guard
@@ -83,7 +100,31 @@
         return Object.keys(result).map(key => ({
             discipline: key,
             iconIndex: BattleManager.ITB_UI.getDisciplineIcon(key),
-            skills: result[key]
+            actions: result[key]
+        }));
+    };
+
+    BattleManager.ITB_UI.getItemRows = function(actor, target) {
+        var result = {};
+        console.log("Get Item Rows");
+        $gameParty.items().forEach(function(item) {
+            //var discipline = item.meta.Discipline || "combat";
+            var discipline = "combat";
+            if (!result[discipline]) {result[discipline] = []};
+            result[discipline].push({
+                id: item.id,
+                type: "item",
+                name: item.name,
+                iconIndex: item.iconIndex,
+                discipline: discipline,
+                enabled: actor.canUse(item),
+                selectable: BattleManager.ITB_UI.isActionSelectable(actor, item),
+            });
+        });
+        return Object.keys(result).map(key => ({
+            discipline: key,
+            iconIndex: BattleManager.ITB_UI.getDisciplineIcon(key),
+            actions: result[key]
         }));
     };
 
@@ -146,16 +187,16 @@
     // Selectability
     //--------------------------------------------------------------------------
 
-    BattleManager.ITB_UI.isActionSelectable = function(actor, skill, target) {
-        return actor && actor.canUse(skill);
+    BattleManager.ITB_UI.isActionSelectable = function(actor, action) {
+        return actor && actor.canUse(action);
     };
 
     //--------------------------------------------------------------------------
     // Visibility
     //--------------------------------------------------------------------------
 
-    BattleManager.ITB_UI.getVisibleActions = function(actor, target) {
-        return this.getDisciplineRows(actor, target);
+    BattleManager.ITB_UI.getVisibleActions = function() {
+        return this.getDisciplineRows();
     };
 
     //--------------------------------------------------------------------------
@@ -167,6 +208,9 @@
         console.log("Actor Command Setup", actor);
         ITB_Command_WAC_setup.call(this, actor);
         this.clearCommandList();
+        /* this.select(-1);
+        this._index = -1;
+        console.log("Index after setup:", this.index()); */
         if (actor) this.initializeITBActionPanel();
     };
 
@@ -180,13 +224,15 @@
         } */
         this.clearITBActionSprites();
         if (!this._actionSprites) this._actionSprites = [];
+        if (!BattleManager.ITB_UI._actionMode) this.setActionMode("skills");
         this._selection = {
-            region: "commands",
-            row: 0,
-            column: 0
+            region: undefined,
+            row: -1,
+            column: -1
         };
         this._hoverSelection = null;
         this.requestITBRefresh();
+        //this.deactivate();
         //this.opacity = 0;
         //this.contentsOpacity = 0;
     };
@@ -207,12 +253,11 @@
 
     Window_ActorCommand.prototype.refreshITBActionPanel = function() {
         this.clearITBActionSprites();
-        var actor = BattleManager.actor();
-        if (!actor) return;
-        var target = BattleManager.ITB_UI.getCurrentTarget();
+        console.log("Refresh Action Panel");
         var commands = BattleManager.ITB_UI.getMainCommands();
-        var rows = BattleManager.ITB_UI.getDisciplineRows(actor, target);
+        var rows = BattleManager.ITB_UI.getDisciplineRows();
         this.drawMainCommands(commands);
+        console.log("Draw rows");
         this.drawDisciplineRows(rows);
         //if (TouchInput.isTriggered()) 
         this.updateMouseSelection();
@@ -263,9 +308,9 @@
         //Disable refesh cursor in original window
     };
 
-    Window_ActorCommand.prototype.processTouch = function() {
+    //Window_ActorCommand.prototype.processTouch = function() {
         // Disable processing selection in original window
-    };
+    //};
 
     Window_ActorCommand.prototype.processOk = function() {
         // Disable processing selection in original window
@@ -278,6 +323,27 @@
         ITB_Command_WAC_update.call(this);
         //if (this._cursorSprite) console.log("Cursor sprite exists");
         //if (this.needRefreshITBPanel()) this.refreshITBActionPanel();
+        if (this._pendingCommand) {
+            this._commandDelay--;
+            if (this._commandDelay <= 0) {	
+                var command = this._pendingCommand;
+                this._pendingCommand = null;
+                switch (command) {
+                case "skill":
+                    this.showActionsCommand("skills");
+                    break;
+                case "item":
+                    this.showActionsCommand("items");
+                    break;
+                case "undo":
+                    this.executeUndoCommand();
+                    break;
+                case "finish":
+                    this.executeFinishCommand();
+                    return;
+                }
+            }	
+        }
         this.updateITBActionPanel();
         this.updateSelectionInput();
         if (Input.isTriggered("ok")) this.processITBOk();
@@ -359,6 +425,7 @@
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.drawDisciplineRows = function(rows) {
+        if (!rows) return;
         var startX = 78;
         var startY = 4;
         var spacingX = 32;
@@ -369,26 +436,21 @@
             icon.y = startY + rowIndex * spacingY;
             this.addChild(icon);
             this._actionSprites.push(icon);
-            rowData.skills.forEach(function(skillData, skillIndex) {
-                var sprite = this.createIconSprite(skillData.iconIndex);
-                sprite.x = startX + (skillIndex + 1) * spacingX + 2;
+            rowData.actions.forEach(function(actionData, actionIndex) {
+                var sprite = this.createIconSprite(actionData.iconIndex);
+                sprite.x = startX + (actionIndex + 1) * spacingX + 2;
                 sprite.y = startY + rowIndex * spacingY;
                 sprite._uiData = {
                     region: "actions",
                     row: rowIndex,
-                    column: skillIndex,
-                    action: skillData
+                    column: actionIndex,
+                    action: actionData
                 };
-                /* sprite._itbType = "action";
-                sprite._skillId = skillData.id;
-                sprite._row = rowIndex;
-                sprite._column = skillIndex; */
-                //opacity = skillData.selectable ? 255 : 100
+                //opacity = actionData.selectable ? 255 : 100
                 this.addChild(sprite);
                 this._actionSprites.push(sprite);
             }, this);
         }, this);
-        //console.log("Removing", this._actionSprites.length, "sprites");
     };
 
     //--------------------------------------------------------------------------
@@ -420,12 +482,9 @@
             return;
         }
         this._actionSprites.forEach(function(sprite) {
-            console.log("Removing", sprite._debugType, sprite._commandId);
             if (sprite && sprite.parent) sprite.parent.removeChild(sprite);
         });
         this._actionSprites = [];
-        //this._actionSprites.length = 0;
-        console.log("Actions cleared:", this.children.length);
     };
 
     //--------------------------------------------------------------------------
@@ -434,6 +493,7 @@
 
     Window_ActorCommand.prototype.updateSelectionInput = function() {
         if (!this.active) return;
+        //if (TouchInput.isCancelled()) this.onCommandSelected("undo");
         this.updateMouseSelection();
         this.updateMouseClick();
         if (Input.isRepeated("left")) this.cursorLeft();
@@ -529,15 +589,13 @@
 
     Window_ActorCommand.prototype.cursorRight = function() {
         if (this.selectedRegion() === "actions") {
-            var rows = BattleManager.ITB_UI.getDisciplineRows(
-                    BattleManager.actor(),
-                    BattleManager.ITB_UI.getCurrentTarget()
-                );
+            var rows = BattleManager.ITB_UI.getDisciplineRows();
+            if (!rows) return;
             var row = rows[this.selectedRow()];
             if (!row) return;
             this._selection.column++;
-            if (this._selection.column >= row.skills.length) {
-                this._selection.column = row.skills.length - 1;
+            if (this._selection.column >= row.actions.length) {
+                this._selection.column = row.actions.length - 1;
             }
         }
         this.refreshSelection();
@@ -555,10 +613,8 @@
     Window_ActorCommand.prototype.cursorDown = function() {
         console.log("CURSOR DOWN", this._selection.row);
         if (this.selectedRegion() === "actions") {
-            var rows = BattleManager.ITB_UI.getDisciplineRows(
-                    BattleManager.actor(),
-                    BattleManager.ITB_UI.getCurrentTarget()
-                );
+            var rows = BattleManager.ITB_UI.getDisciplineRows();
+            if (!rows) return;
             this._selection.row++;
             if (this._selection.row >= rows.length) {
                 this._selection.row = rows.length - 1;
@@ -582,30 +638,34 @@
     };
 
     //--------------------------------------------------------------------------
-    // Selection callbacks
+    // Command selection callbacks
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.onCommandSelected = function(command) {
+        if (this._pendingCommand) return;
+        this.refreshSelection();
+        this._pendingCommand = command.id;
+        this._commandDelay = 1;
+    };
+
+    /* Window_ActorCommand.prototype.onCommandSelected = function(command) {
         console.log("COMMAND", command.id);
+        this.queueCommand(command.id);
         switch (command.id) {
             case "skill":
-                //BattleManager.ITB_UI.setActionMode("skill");
-                //this.requestITBRefresh();
-                this.onSkillMode();
+                this.queueCommand("skills");
                 break;
             case "item":
-                //BattleManager.ITB_UI.setActionMode("item");
-                //this.requestITBRefresh();
-                this.onItemMode();
+                this.queueCommand("items");
                 break;
             case "undo":
-                this.executeUndoCommand();
+                this.queueCommand;
                 break;
             case "finish":
                 this.executeFinishCommand();
                 break;
         }
-    };
+    }; */
 
     Window_ActorCommand.prototype.onActionSelected = function(data) {
         var action = BattleManager.inputtingAction();
@@ -617,6 +677,9 @@
             action.setItem(data.id);
             $gameParty.setLastItem($dataItems[data.id]);
         }
+        //console.log("Enemy Window Active?:", SceneManager._scene._enemyWindow.active);
+        //console.log("Needs Selection?", action.needsSelection());
+        //console.log("Enemy Selection?", action.isForOpponent());
         SceneManager._scene.onSelectAction();
         //console.log("ACTION", action.name);
         //BattleManager.ITB_UI.setSelectedAction(action);
@@ -650,6 +713,9 @@
     }; */
 
     Window_ActorCommand.prototype.currentSelectionSprite = function() {
+        if (!this._selection) {
+            this._selection = {region: undefined, row: -1, column: -1};
+        }
         var region = this._selection.region;
         var row = this._selection.row;
         var column = this._selection.column;
@@ -686,18 +752,14 @@
     };
 
     Window_ActorCommand.prototype.currentSelectionData = function() {
-        var actor = BattleManager.actor();
-        if (!actor) return null;
         if (this._selection.region === "commands") {
             return BattleManager.ITB_UI.getMainCommands()[this._selection.index];
         }
-        var rows = BattleManager.ITB_UI.getDisciplineRows(
-            actor,
-            BattleManager.ITB_UI.getCurrentTarget()
-        );
+        var rows = BattleManager.ITB_UI.getDisciplineRows();
+        if (!rows) return;
         var row = rows[this._selection.row];
         if (!row) return null;
-        return row.skills[this._selection.column];
+        return row.actions[this._selection.column];
     };
 
     //--------------------------------------------------------------------------
@@ -710,8 +772,8 @@
         console.log("UNDO");
         //if (actor.removeLastQueuedAction) actor.removeLastQueuedAction();
         //if (BattleManager.selectPreviousCommand) BattleManager.selectPreviousCommand();
-        BattleManager.selectPreviousCommand();
-        this.requestITBRefresh();
+        SceneManager._scene.selectPreviousCommand();
+        //this.requestITBRefresh();
     };
 
     //--------------------------------------------------------------------------
@@ -720,28 +782,31 @@
 
     Window_ActorCommand.prototype.executeFinishCommand = function() {
         console.log("FINISH");
-        BattleManager.finishActionQueue();
+        //this.refreshSelection();
+        this.deactivate();
+        SceneManager._scene.finishActionQueue();
+        /* if (this._finishPending) return;		
+        this.refreshSelection();
+        this._finishPending = true;
+        this._finishDelay = 1;	 */
         //if (BattleManager.finishActionQueue) BattleManager.finishActionQueue();
     };
 
     //--------------------------------------------------------------------------
-    // Skill wrapper
+    // Keep selection valid after switching mode
     //--------------------------------------------------------------------------
 
-    Window_ActorCommand.prototype.onSkillMode = function() {
-        console.log("ON SKILL MODE");
-        BattleManager.ITB_UI.setActionMode("skill");
+    Window_ActorCommand.prototype.showActionsCommand = function(mode) {
+        if (BattleManager.ITB_UI._actionMode === mode) return;
+        console.log("Show actions", mode);
+        this.setActionMode(mode);
+        this.clearITBActionSprites();
         this.requestITBRefresh();
-    };
-
-    //--------------------------------------------------------------------------
-    // Item wrapper
-    //--------------------------------------------------------------------------
-
-    Window_ActorCommand.prototype.onItemMode = function() {
-        console.log("ON ITEM MODE");
-        BattleManager.ITB_UI.setActionMode("item");
-        this.requestITBRefresh();
+        this._selection = {
+            region: "actions",
+            row: 0,
+            column: 0
+        };
     };
 
 })();

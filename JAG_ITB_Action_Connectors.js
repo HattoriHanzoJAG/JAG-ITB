@@ -32,7 +32,7 @@
 (function() {
 
     const TRACE_CONNECTORS = true;
-    const DEBUG_CONNECTORS = false;
+    const DEBUG_CONNECTORS = true;
 
     //=============================================================================
     // Database Loading
@@ -786,6 +786,11 @@
             BattleManager._connectorTargetMode = false;
             this._enemyWindow.hide();
             this._enemyWindow.deactivate();
+            actor._connectorPreviewTarget.deselect();
+            console.log(
+                actor._connectorPreviewTarget,
+                actor._connectorPreviewTarget.isSelected()
+            );
             return;
         }
         Connector_SB_onEnemyOk.call(this);
@@ -885,6 +890,7 @@
         $gameTroop.members().forEach(function(enemy) {
             enemy.deselect();
         });
+        console.log("Actor Command Window Active?:", this._actorCommandWindow.active);
         Connector_SB_finishActionQueue.call(this);
     };
 
@@ -912,6 +918,7 @@
                 }
             );
         }
+        console.log("Actor Command Window Active?:", this._actorCommandWindow.active);
         if (!actor) return;
         if (!actor._connectorPreviewTarget) {
             if (actor.queueLength() <= 0) {
