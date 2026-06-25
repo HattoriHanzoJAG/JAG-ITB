@@ -68,16 +68,16 @@
         console.log("Get Discipline Rows", this._actionMode);
         var actor = BattleManager.actor();
         if (!actor) return [];
-        var target = actor._connectorPreviewTarget || BattleManager.ITB_UI.getCurrentTarget();
+        //var target = actor._connectorPreviewTarget || BattleManager.ITB_UI.getCurrentTarget();
         if (this._actionMode === "items") {
-            rows = BattleManager.ITB_UI.getItemRows(actor, target);
+            rows = BattleManager.ITB_UI.getItemRows(actor);
         } else {
-            rows = BattleManager.ITB_UI.getSkillRows(actor, target);
+            rows = BattleManager.ITB_UI.getSkillRows(actor);
         }
         return rows;
     };
         
-    BattleManager.ITB_UI.getSkillRows = function(actor, target) {
+    BattleManager.ITB_UI.getSkillRows = function(actor) {
         var result = {};
         console.log("Get Skill Rows");
         actor.skills().forEach(skill => {
@@ -104,7 +104,7 @@
         }));
     };
 
-    BattleManager.ITB_UI.getItemRows = function(actor, target) {
+    BattleManager.ITB_UI.getItemRows = function(actor) {
         var result = {};
         console.log("Get Item Rows");
         $gameParty.items().forEach(function(item) {
@@ -200,6 +200,30 @@
     };
 
     //--------------------------------------------------------------------------
+    // Layout helpers
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.uiStartX = function() {
+        return 4;
+    };
+
+    Window_ActorCommand.prototype.uiStartY = function() {
+        return 4;
+    };
+
+    Window_ActorCommand.prototype.actionRowStartX = function() {
+        return (this.uiStartX() + 2 * this.uiSpacingX() + 10);
+    };
+
+    Window_ActorCommand.prototype.uiSpacingX = function() {
+        return 32;
+    };
+
+    Window_ActorCommand.prototype.uiSpacingY = function() {
+        return 32;
+    };
+
+    //--------------------------------------------------------------------------
     // Initialization
     //--------------------------------------------------------------------------
 
@@ -223,6 +247,10 @@
             this._itbInitialized = true;
         } */
         this.clearITBActionSprites();
+        this.height = this.uiWindowHeight();
+        this.width = Graphics.boxWidth;
+        this.updateUIWindowPosition();
+        this.createContents();
         if (!this._actionSprites) this._actionSprites = [];
         if (!BattleManager.ITB_UI._actionMode) this.setActionMode("skills");
         this._selection = {
@@ -231,10 +259,39 @@
             column: -1
         };
         this._hoverSelection = null;
+        //this.createSelectionBorder();
         this.requestITBRefresh();
         //this.deactivate();
         //this.opacity = 0;
         //this.contentsOpacity = 0;
+    };
+
+    //--------------------------------------------------------------------------
+    // Command window height
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.uiWindowHeight = function() {
+        var rows = Math.max(BattleManager.ITB_UI.getDisciplineRows().length, 1);
+        return (this.uiStartY() * 2 + 
+            rows * this.uiSpacingY() + 
+            this.standardPadding());
+    };
+
+    //--------------------------------------------------------------------------
+    // Command window wi
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.uiWindowHeight = function() {
+        var rows = Math.max(BattleManager.ITB_UI.getDisciplineRows().length, 1);
+        return (this.uiStartY() * 2 + rows * this.uiSpacingY());
+    };
+
+    //--------------------------------------------------------------------------
+    // Command window position
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.updateUIWindowPosition = function() {
+        this.y = Graphics.boxHeight - this.height;
     };
 
     //--------------------------------------------------------------------------
@@ -277,13 +334,25 @@
         this._actionSprites.forEach(function(sprite) {
             sprite.scale.x = 1;
             sprite.scale.y = 1;
+            sprite.opacity = 215;
+            sprite.setBlendColor([0, 0, 0, 0]);
         });
         var selected = this.currentSelectionSprite();
         console.log("SELECT", selected);
-        if (!selected) return;
-        selected.scale.x = 1.1;
-        selected.scale.y = 1.1;
-        console.log("Sprite scaled");
+        if (!selected) {
+            //if (this._selectionBorder) this._selectionBorder.visible = false;
+            return;
+        }
+        selected.opacity = 255;
+        selected.setBlendColor([255, 255, 100, 64]);
+        selected.scale.x = 1.05;
+        selected.scale.y = 1.05;
+        /* if (this._selectionBorder){
+            this._selectionBorder.x = selected.x - 3;
+            this._selectionBorder.y = selected.y - 3;
+            this._selectionBorder.visible = true;
+        } */
+        console.log("Sprite highlighted");
     };
 
     //--------------------------------------------------------------------------
@@ -393,17 +462,13 @@
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.drawMainCommands = function(commands) {
-        var startX = 4;
-        var startY = 4;
-        var spacingX = 32;
-        var spacingY = 32;
         commands.forEach(function(command, index) {
             var col = index % 2;
             var row = Math.floor(index / 2);
             var sprite = this.createIconSprite(command.iconIndex);
             //console.log("Command Index:", command.iconIndex);
-            sprite.x = startX + col * spacingX;
-            sprite.y = startY + row * spacingY;
+            sprite.x = this.uiStartX() + col * this.uiSpacingX();
+            sprite.y = this.uiStartY() + row * this.uiSpacingY();
             sprite._uiData = {
                 region: "commands",
                 row: row,
@@ -426,20 +491,17 @@
 
     Window_ActorCommand.prototype.drawDisciplineRows = function(rows) {
         if (!rows) return;
-        var startX = 78;
-        var startY = 4;
-        var spacingX = 32;
-        var spacingY = 32;
+        var startX = this.actionRowStartX();
         rows.forEach(function(rowData, rowIndex) {
             var icon = this.createIconSprite(rowData.iconIndex);
             icon.x = startX;
-            icon.y = startY + rowIndex * spacingY;
+            icon.y = this.uiStartY() + rowIndex * this.uiSpacingY();
             this.addChild(icon);
             this._actionSprites.push(icon);
             rowData.actions.forEach(function(actionData, actionIndex) {
                 var sprite = this.createIconSprite(actionData.iconIndex);
-                sprite.x = startX + (actionIndex + 1) * spacingX + 2;
-                sprite.y = startY + rowIndex * spacingY;
+                sprite.x = startX + (actionIndex + 1) * this.uiSpacingX() + 2;
+                sprite.y = this.uiStartY() + rowIndex * this.uiSpacingY();
                 sprite._uiData = {
                     region: "actions",
                     row: rowIndex,
@@ -472,11 +534,29 @@
     };
 
     //--------------------------------------------------------------------------
+    // Add selection border helper
+    //--------------------------------------------------------------------------
+
+    /* Window_ActorCommand.prototype.createSelectionBorder = function() {
+        if (this._selectionBorder) return;
+        var size = Window_Base._iconWidth + 4;
+        var bitmap = new Bitmap(size, size);
+        //bitmap.fillRect(0, 0, size, size, "#000000");
+        bitmap.fillRect(2, 2, size - 2, size - 2, "#F7E839");
+        //bitmap.fillRect(2, 2, size - 4, size - 4, "#F7E839");
+        bitmap.fillRect(4, 4, size - 6, size - 6, "#000000");
+        this._selectionBorder = new Sprite(bitmap);
+        this._selectionBorder.visible = false;
+        this.addChild(this._selectionBorder);
+    }; */
+
+    //--------------------------------------------------------------------------
     // Clear old icons helper
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.clearITBActionSprites = function() {
         console.log("Clear Actions:", this.children.length);
+        //if (this._selectionBorder) this._selectionBorder.visible = false;
         if (!this._actionSprites) {
             this._actionSprites = [];
             return;
@@ -645,7 +725,7 @@
         if (this._pendingCommand) return;
         this.refreshSelection();
         this._pendingCommand = command.id;
-        this._commandDelay = 1;
+        this._commandDelay = 2;
     };
 
     /* Window_ActorCommand.prototype.onCommandSelected = function(command) {
