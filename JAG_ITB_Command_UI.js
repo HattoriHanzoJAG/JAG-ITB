@@ -212,19 +212,27 @@
     };
 
     Window_ActorCommand.prototype.actionRowStartX = function() {
-        return (this.uiStartX() + 2 * this.uiSpacingX() + 10);
+        return (this.uiStartX() + 2 * this.uiSpacing() + 10);
     };
 
-    Window_ActorCommand.prototype.uiSpacingX = function() {
+    Window_ActorCommand.prototype.uiDefaultSpacing = function() {
         return 32;
     };
 
-    Window_ActorCommand.prototype.uiSpacingY = function() {
-        return 32;
+    Window_ActorCommand.prototype.uiSpacing = function() {
+        return this.uiDefaultSpacing() * this.uiIconScale();
+    };
+
+    Window_ActorCommand.prototype.uiIconScale = function() {
+        return 0.95; //this.uiSpacing() / Window_Base._iconWidth;
+    };
+
+    Window_ActorCommand.prototype.uiSelectScale = function() {
+        return 1; //1.05 * this.uiIconScale();
     };
 
     //--------------------------------------------------------------------------
-    // Initialization
+    // Command window initialization
     //--------------------------------------------------------------------------
 
     var ITB_Command_WAC_setup = Window_ActorCommand.prototype.setup;
@@ -232,20 +240,11 @@
         console.log("Actor Command Setup", actor);
         ITB_Command_WAC_setup.call(this, actor);
         this.clearCommandList();
-        /* this.select(-1);
-        this._index = -1;
-        console.log("Index after setup:", this.index()); */
         if (actor) this.initializeITBActionPanel();
     };
 
     Window_ActorCommand.prototype.initializeITBActionPanel = function() {
         console.log("ITB Action Panel Initialize");
-        //this._mainCommands = [];
-        //this._disciplineRows = [];
-        /* if (!this._itbInitialized) {
-            this.initializeITBActionPanel();
-            this._itbInitialized = true;
-        } */
         this.clearITBActionSprites();
         this.height = this.uiWindowHeight();
         this.width = Graphics.boxWidth;
@@ -259,31 +258,64 @@
             column: -1
         };
         this._hoverSelection = null;
+        this._scrollRow = 0;
         //this.createSelectionBorder();
         this.requestITBRefresh();
-        //this.deactivate();
         //this.opacity = 0;
         //this.contentsOpacity = 0;
     };
+
+    //--------------------------------------------------------------------------
+    // Status window initialization
+    //--------------------------------------------------------------------------
+
+    Window_BattleStatus.prototype.initialize = function() {
+        var width = Graphics.boxWidth;
+        var height = this.windowHeight();
+        var x = Graphics.boxWidth - width;
+        var scene = SceneManager._scene;
+        if (scene && scene._actorCommandWindow) {
+            var y = Graphics.boxHeight - height - scene._actorCommandWindow.height;
+        } else {
+            var y = Graphics.boxHeight - height;
+        }
+        Window_Selectable.prototype.initialize.call(this, x, y, width, height);
+        //this.createActiveActorHighlight();
+        this.refresh();
+        this.openness = 0;
+    };
+
+    Window_BattleStatus.prototype.numVisibleRows = function() {
+        return 1;
+    };
+
+    Window_BattleStatus.prototype.standardFontSize = function() {
+        return 24;    // MV default is 28
+    };
+
+    Window_BattleStatus.prototype.lineHeight = function() {
+        return 28;
+    };
+
+    Window_BattleStatus.prototype.standardPadding = function() {
+        return 8;    // default is 18
+    };
+
+    //--------------------------------------------------------------------------
+    // Visible discipline rows
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.visibleRows = function() {
+        //return Math.max(this.maxRows(), 1);
+        return 3;
+    }
 
     //--------------------------------------------------------------------------
     // Command window height
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.uiWindowHeight = function() {
-        var rows = Math.max(BattleManager.ITB_UI.getDisciplineRows().length, 1);
-        return (this.uiStartY() * 2 + 
-            rows * this.uiSpacingY() + 
-            this.standardPadding());
-    };
-
-    //--------------------------------------------------------------------------
-    // Command window wi
-    //--------------------------------------------------------------------------
-
-    Window_ActorCommand.prototype.uiWindowHeight = function() {
-        var rows = Math.max(BattleManager.ITB_UI.getDisciplineRows().length, 1);
-        return (this.uiStartY() * 2 + rows * this.uiSpacingY());
+        return (this.uiStartY() * 2 + this.visibleRows() * this.uiSpacing() + 2);
     };
 
     //--------------------------------------------------------------------------
@@ -298,14 +330,14 @@
     // UI refresh cycle
     //--------------------------------------------------------------------------
 
-    Window_ActorCommand.prototype.drawItem = function(index) {
-        // Disable draw items in original window
-    };
-
     Window_ActorCommand.prototype.makeCommandList = function(index) {
     };
 
     Window_ActorCommand.prototype.refresh = function() {
+    };
+
+    Window_ActorCommand.prototype.refreshCursor = function() {
+        //Disable refesh cursor in original window
     };
 
     Window_ActorCommand.prototype.refreshITBActionPanel = function() {
@@ -327,13 +359,15 @@
 
     Window_ActorCommand.prototype.requestITBRefresh = function() {
         console.log("Request refresh");
+        this.ensureSelectionVisible();
         this._needsRefresh = true;
     };
 
     Window_ActorCommand.prototype.refreshSelection = function() {
+        var scale = this.uiIconScale();
         this._actionSprites.forEach(function(sprite) {
-            sprite.scale.x = 1;
-            sprite.scale.y = 1;
+            sprite.scale.x = scale;
+            sprite.scale.y = scale;
             sprite.opacity = 215;
             sprite.setBlendColor([0, 0, 0, 0]);
         });
@@ -345,8 +379,8 @@
         }
         selected.opacity = 255;
         selected.setBlendColor([255, 255, 100, 64]);
-        selected.scale.x = 1.05;
-        selected.scale.y = 1.05;
+        selected.scale.x = this.uiSelectScale();
+        selected.scale.y = this.uiSelectScale();
         /* if (this._selectionBorder){
             this._selectionBorder.x = selected.x - 3;
             this._selectionBorder.y = selected.y - 3;
@@ -355,10 +389,30 @@
         console.log("Sprite highlighted");
     };
 
+    Window_BattleStatus.prototype.refreshActiveActor = function() {
+        // Refresh active actor displayed
+        var actor = BattleManager.actor();
+        if (!actor) return;
+        this.setTopRow(actor.index());
+        this.refresh();
+    };
+
     //--------------------------------------------------------------------------
     // UI update loop
     //--------------------------------------------------------------------------
 
+    var ITB_Command_SB_update = Scene_Battle.prototype.update;
+    Scene_Battle.prototype.update = function() {
+        ITB_Command_SB_update.call(this);
+        // Use mouse wheel to toggle between actors in battle status window
+        if (TouchInput.wheelY >= 20) {
+            this.cycleStatusActor(1);
+        }
+        if (TouchInput.wheelY <= -20) {
+            this.cycleStatusActor(-1);
+        }
+    }
+    
     Window_ActorCommand.prototype.updateCursor = function() {
         // Disable cursor rectangle in original window
         //this.setCursorRect(0,0,0,0);
@@ -370,16 +424,11 @@
 
     Window_ActorCommand.prototype.isCursorVisible = function() {
         // Disable cursor rectangle in original window
-        //return false;
     };
 
-    Window_ActorCommand.prototype.refreshCursor = function() {
-        //Disable refesh cursor in original window
+    Window_ActorCommand.prototype.drawItem = function(index) {
+        // Disable draw items in original window
     };
-
-    //Window_ActorCommand.prototype.processTouch = function() {
-        // Disable processing selection in original window
-    //};
 
     Window_ActorCommand.prototype.processOk = function() {
         // Disable processing selection in original window
@@ -436,6 +485,17 @@
         }
     };
 
+    var ITB_Command_updateWindowPositions = Scene_Battle.prototype.updateWindowPositions;
+    Scene_Battle.prototype.updateWindowPositions = function() {
+        ITB_Command_updateWindowPositions.call(this);
+        // Fix position of battle status window
+        this._statusWindow.x = 0;
+        this._statusWindow.y =
+            Graphics.boxHeight -
+            this._statusWindow.height -
+            this._actorCommandWindow.height;
+    };
+
     //--------------------------------------------------------------------------
     // Action rendering (testing only)
     //--------------------------------------------------------------------------
@@ -467,8 +527,8 @@
             var row = Math.floor(index / 2);
             var sprite = this.createIconSprite(command.iconIndex);
             //console.log("Command Index:", command.iconIndex);
-            sprite.x = this.uiStartX() + col * this.uiSpacingX();
-            sprite.y = this.uiStartY() + row * this.uiSpacingY();
+            sprite.x = this.uiStartX() + col * this.uiSpacing();
+            sprite.y = this.uiStartY() + row * this.uiSpacing();
             sprite._uiData = {
                 region: "commands",
                 row: row,
@@ -492,16 +552,40 @@
     Window_ActorCommand.prototype.drawDisciplineRows = function(rows) {
         if (!rows) return;
         var startX = this.actionRowStartX();
-        rows.forEach(function(rowData, rowIndex) {
+        var first = this._scrollRow;
+        var last = Math.min(first + this.visibleRows(), rows.length);
+        for (var rowIndex = first; rowIndex < last; rowIndex++) {
+            var rowData = rows[rowIndex];
+            var visibleRow = rowIndex - first;
             var icon = this.createIconSprite(rowData.iconIndex);
             icon.x = startX;
-            icon.y = this.uiStartY() + rowIndex * this.uiSpacingY();
+            icon.y = this.uiStartY() + visibleRow * this.uiSpacing();
             this.addChild(icon);
             this._actionSprites.push(icon);
             rowData.actions.forEach(function(actionData, actionIndex) {
                 var sprite = this.createIconSprite(actionData.iconIndex);
-                sprite.x = startX + (actionIndex + 1) * this.uiSpacingX() + 2;
-                sprite.y = this.uiStartY() + rowIndex * this.uiSpacingY();
+                sprite.x = startX + (actionIndex + 1) * this.uiSpacing() + 2;
+                sprite.y = this.uiStartY() + visibleRow * this.uiSpacing();
+                sprite._uiData = {
+                    region: "actions",
+                    row: rowIndex, // <-- REAL row
+                    column: actionIndex,
+                    action: actionData
+                };
+                this.addChild(sprite);
+                this._actionSprites.push(sprite);
+            }, this);
+        }
+        /* rows.forEach(function(rowData, rowIndex) {
+            var icon = this.createIconSprite(rowData.iconIndex);
+            icon.x = startX;
+            icon.y = this.uiStartY() + rowIndex * this.uiSpacing();
+            this.addChild(icon);
+            this._actionSprites.push(icon);
+            rowData.actions.forEach(function(actionData, actionIndex) {
+                var sprite = this.createIconSprite(actionData.iconIndex);
+                sprite.x = startX + (actionIndex + 1) * this.uiSpacing() + 2;
+                sprite.y = this.uiStartY() + rowIndex * this.uiSpacing();
                 sprite._uiData = {
                     region: "actions",
                     row: rowIndex,
@@ -512,7 +596,7 @@
                 this.addChild(sprite);
                 this._actionSprites.push(sprite);
             }, this);
-        }, this);
+        }, this); */
     };
 
     //--------------------------------------------------------------------------
@@ -521,6 +605,8 @@
 
     Window_ActorCommand.prototype.createIconSprite = function(iconIndex) {
         var sprite = new Sprite(ImageManager.loadSystem("IconSet"));
+        //var offsetX = this.uiSpacingX() - 32;
+        //var offsetY = this.uiSpacingY() - 32;
         //sprite._debugId = Math.random();
         //console.log("CREATE", sprite._debugId, iconIndex);
         sprite.bitmap.addLoadListener(function() {
@@ -530,6 +616,8 @@
             var sy = Math.floor(iconIndex / 16) * ph;
             sprite.setFrame(sx, sy, pw, ph);
         });
+        sprite.scale.x = this.uiIconScale();
+        sprite.scale.y = this.uiIconScale(); 
         return sprite;
     };
 
@@ -574,6 +662,7 @@
     Window_ActorCommand.prototype.updateSelectionInput = function() {
         if (!this.active) return;
         //if (TouchInput.isCancelled()) this.onCommandSelected("undo");
+        this.updateScrollArrows();
         this.updateMouseSelection();
         this.updateMouseClick();
         if (Input.isRepeated("left")) this.cursorLeft();
@@ -687,6 +776,7 @@
             this._selection.row--;
             if (this._selection.row < 0) this._selection.row = 0;
         }
+        this.ensureSelectionVisible();
         this.refreshSelection();
     };
 
@@ -700,6 +790,7 @@
                 this._selection.row = rows.length - 1;
             }
         }
+        this.ensureSelectionVisible();
         this.refreshSelection();
     };
 
@@ -887,6 +978,172 @@
             row: 0,
             column: 0
         };
+    };
+
+    //--------------------------------------------------------------------------
+    // Scroll helpers
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.maxRows = function() {
+        return BattleManager.ITB_UI.getDisciplineRows().length;
+    };
+
+    Window_ActorCommand.prototype.maxScrollRow = function() {
+        return Math.max(0, this.maxRows() - this.visibleRows());
+    };
+
+    Window_ActorCommand.prototype.ensureSelectionVisible = function() {
+        if (this._selection.row < this._scrollRow) {
+            this._scrollRow = this._selection.row;
+        }
+        if (this._selection.row >= this._scrollRow + this.visibleRows()) {
+            this._scrollRow = this._selection.row - this.visibleRows() + 1;
+        }
+        this._scrollRow = Math.max(0, Math.min(this._scrollRow, this.maxScrollRow()));
+    };
+
+    //--------------------------------------------------------------------------
+    // Command window scroll arrows
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.updateScrollArrows = function() {
+        this.upArrowVisible = this._scrollRow > 0;
+        this.downArrowVisible = this._scrollRow < this.maxScrollRow();
+    };
+
+    //--------------------------------------------------------------------------
+    // Display active actor indicator
+    //--------------------------------------------------------------------------
+
+    Window_BattleStatus.prototype.updateCursor = function() {
+        // Normal RPG Maker behaviour while the window is active
+        if (this.active) {
+            Window_Selectable.prototype.updateCursor.call(this);
+            return;
+        }
+        // Otherwise highlight the currently active battler
+        var actor = BattleManager.actor();
+        if (actor) {
+            var rect = this.itemRect(actor.index());
+            this.setCursorRect(rect.x, rect.y, rect.width, rect.height);
+        } else {
+            this.setCursorRect(0, 0, 0, 0);
+        }
+    };
+
+    /* var ITB_Command_WBS_drawItem = Window_BattleStatus.prototype.drawItem;
+    Window_BattleStatus.prototype.drawItem = function(index) {
+        ITB_Command_WBS_drawItem.call(this, index);
+        var actor = BattleManager.actor();
+        if (!actor) return;
+        if (actor.index() !== index) return;
+        this.drawActiveActorIndicator(index);
+    }; */
+
+    /* Window_BattleStatus.prototype.drawActiveActorIndicator = function(index) {
+        var rect = this.itemRect(index);
+        var bmp = new Bitmap(rect.idth, rect.height);
+        bmp.fillRect(0, 0, rect.width, rect.height, "#89E5BF");
+        this._activeActorHighlight.bitmap = bmp;
+        this._activeActorHighlight.x = rect.x;
+        this._activeActorHighlight.y = rect.y;
+        this._activeActorHighlight.visible = true;
+        //this.contents.fillRect(rect.x, rect.y, 4, rect.height, "#4FA3FF");
+        this.contents.paintOpacity = 50;
+        this.contents.fillRect(rect.x, rect.y, rect.width, rect.height, "#89E5BF");
+        this.contents.paintOpacity = 255;
+        this.contents.fillRect(rect.x, rect.y, rect.width, 2, "#89E5BF");
+        this.contents.fillRect(rect.x, rect.y + rect.height - 2, rect.width, 2, "#89E5BF");
+        this.contents.fillRect(rect.x, rect.y, 2, rect.height, "#89E5BF");
+        this.contents.fillRect(rect.x + rect.width - 2, rect.y, 2, rect.height, "#89E5BF");
+    }; */
+
+    /* Window_BattleStatus.prototype.createActiveActorHighlight = function() {
+        this._activeActorHighlight = new Sprite(new Bitmap(1, 1));
+        this._activeActorHighlight.visible = false;
+        this.addChildToBack(this._activeActorHighlight);
+    }; */
+
+    //--------------------------------------------------------------------------
+    // Adjust actor status icons
+    //--------------------------------------------------------------------------
+
+    Window_BattleStatus.prototype.drawBasicArea = function(rect, actor) {
+        //console.log("Draw Area");
+        this.drawActorName(actor, rect.x + 0, rect.y, 150);
+        this.drawStatusIcons(actor, rect.x + 156, rect.y - 3, rect.width - 156);
+    };
+
+    Window_BattleStatus.prototype.drawStatusIcons = function(actor, x, y, width) {
+        //console.log("Draw icon");
+        width = width || 144;
+        //var size = 32;               // e.g. 30 instead of 32
+        var spacing = 0.95 * Window_Base._iconWidth; //size;
+        var icons = actor.allIcons().slice(0, Math.floor(width / spacing));
+        for (var i = 0; i < icons.length; i++) {
+            this.drawScaledIcon(icons[i], x + spacing * i, y + 2, spacing);//, size);
+        }
+    };
+
+    Window_Base.prototype.drawScaledIcon = function(iconIndex, x, y, size) {
+        //console.log("Rescale");
+        var bitmap = ImageManager.loadSystem('IconSet');
+        var pw = Window_Base._iconWidth;
+        var ph = Window_Base._iconHeight;
+        var sx = (iconIndex % 16) * pw;
+        var sy = Math.floor(iconIndex / 16) * ph;
+        this.contents.blt(bitmap, sx, sy, pw, ph, x, y, size, size);
+        //this.contents.resize(0.5 * pw, 0.5 * ph);
+    };
+
+    //--------------------------------------------------------------------------
+    // Refresh active actor indicator
+    //--------------------------------------------------------------------------
+    
+    var ITB_Command_SB_startActorCommandSelection = Scene_Battle.prototype.startActorCommandSelection;
+    Scene_Battle.prototype.startActorCommandSelection = function() {
+        SceneManager._scene._statusWindow.refreshActiveActor();
+        this.syncStatusWindowToActiveActor();
+        ITB_Command_SB_startActorCommandSelection.call(this);
+    };
+
+    var ITB_SB_selectEnemySelection = Scene_Battle.prototype.selectEnemySelection;
+    Scene_Battle.prototype.selectEnemySelection = function() {
+        this.syncStatusWindowToActiveActor();
+        ITB_SB_selectEnemySelection.call(this);
+    };
+
+    var ITB_SB_selectActorSelection = Scene_Battle.prototype.selectActorSelection;
+    Scene_Battle.prototype.selectActorSelection = function() {
+        this.syncStatusWindowToActiveActor();
+        ITB_SB_selectActorSelection.call(this);
+    };
+
+    //--------------------------------------------------------------------------
+    // Actor toggling helper
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.cycleStatusActor = function(direction) {
+        if (!this._statusWindow) return;
+        var members = $gameParty.battleMembers();
+        if (members.length <= 1) return;
+        var index = this._statusWindow.index();
+        if (index < 0) index = BattleManager.actor().index();
+        index += direction;
+        if (index < 0) index = members.length - 1;
+        if (index >= members.length) index = 0;
+        this._statusWindow.select(index);
+    };
+
+    //--------------------------------------------------------------------------
+    // Sync battle status window to the active actor
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.syncStatusWindowToActiveActor = function() {
+        if (!this._statusWindow) return;
+        var actor = BattleManager.actor();
+        if (!actor) return;
+        this._statusWindow.setTopRow(actor.index());
     };
 
 })();
