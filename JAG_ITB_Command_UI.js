@@ -142,6 +142,7 @@
             sorcery: 163,
             diplomacy: 165,
             manoeuvre: 164,
+            distance: 164,
             deception: 161
         };
         return icons[discipline] || 0;
@@ -1063,11 +1064,11 @@
     };
 
     Window_BattleStatus.prototype.standardFontSize = function() {
-        return 24;    // MV default is 28
+        return 26;    // MV default is 28
     };
 
     Window_BattleStatus.prototype.lineHeight = function() {
-        return 28;
+        return 40;
     };
 
     Window_BattleStatus.prototype.standardPadding = function() {
@@ -1096,7 +1097,7 @@
     };
 
     Window_BattleStatus.prototype.connectorAreaWidth = function() {
-        return 180;
+        return 112;
     };
 
     //--------------------------------------------------------------------------
@@ -1171,15 +1172,15 @@
     Window_BattleStatus.prototype.drawBasicArea = function(rect, actor) {
         //console.log("Draw Area");
         this.scaleIconSize();
-        var x = rect.x;
-        this.drawScaledFace(actor, x, rect.y - 2);
+        var x = rect.x - 2;
+        this.drawScaledFace(actor, x, rect.y + 4);
         x += this._actorIconSize + 8;
-        var nameWidth = 120;
-        this.drawActorName(actor, x, rect.y, nameWidth);
-        x += nameWidth + 8;
+        var nameWidth = 150;
+        this.drawActorName(actor, x, rect.y + 2, nameWidth);
+        x += nameWidth + 2;
         this.drawActorConnectors(actor, x, rect.y - 2);
-        x += connectorAreaWidth();
-        this.drawStatusIcons(actor, x, rect.y - 2, rect.right - x);
+        x += this.connectorAreaWidth();
+        this.drawStatusIcons(actor, x, rect.y + 2, rect.right - x);
     };
 
     Window_BattleStatus.prototype.drawStatusIcons = function(actor, x, y, width) {
@@ -1199,7 +1200,7 @@
     };
 
     Window_BattleStatus.prototype.scaleIconSize = function() {
-        this._actorIconSize = 0.9 * Window_Base._iconWidth;
+        this._actorIconSize = Window_Base._iconWidth;
     };
 
     //--------------------------------------------------------------------------
@@ -1241,7 +1242,7 @@
 
     var ITB_Command_WBA_gaugeAreaWidth = Window_BattleStatus.prototype.gaugeAreaWidth;
     Window_BattleStatus.prototype.gaugeAreaWidth = function() {
-        return 380;
+        return 376;
     };
 
     //==========================================================================
@@ -1321,7 +1322,7 @@
     };
 
     Window_Base.prototype.connectorSpacing = function() {
-        return 34;
+        return 36;
     };
 
     Window_Base.prototype.connectorTextWidth = function() {
@@ -1336,18 +1337,25 @@
         var names = actor.connectorNames();
         var iconSize = this.connectorIconSize();
         var spacing = this.connectorSpacing();
+        this.contents.fontSize = 22;
         names.forEach(function(name, i) {
-            var icon = BattleManager.ITB_UI.getDisciplineIcon[name];
+            var col = i % 3;
+            var row = Math.floor(i / 3);
+            var drawX = x + col * spacing;
+            var drawY = y + row * iconSize + 2;
+            var icon = BattleManager.ITB_UI.getDisciplineIcon(name);
             var value = actor.connector(name);
-            this.drawScaledIcon(icon, x + i * spacing, y, iconSize);
+            //console.log("Icon:", icon);
+            this.drawScaledIcon(icon, drawX, drawY, iconSize);
             this.drawText(
                 value === undefined ? "-" : value,
-                x + i * spacing + iconSize + 2,
-                y - 1,
+                drawX + iconSize + 2,
+                drawY - 10,
                 this.connectorTextWidth(),
                 "left"
             );
         }, this);
+        this.resetFontSettings();
     };
 
     //==========================================================================
