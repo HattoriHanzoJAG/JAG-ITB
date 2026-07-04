@@ -355,7 +355,7 @@
             sprite.setBlendColor([0, 0, 0, 0]);
         });
         var selected = this.currentSelectionSprite();
-        console.log("SELECT", selected);
+        //console.log("SELECT", selected);
         if (!selected) {
             //if (this._selectionBorder) this._selectionBorder.visible = false;
             return;
@@ -369,7 +369,8 @@
             this._selectionBorder.y = selected.y - 3;
             this._selectionBorder.visible = true;
         } */
-        console.log("Sprite highlighted");
+        //console.log("Sprite highlighted");
+        this.updatePreviewWindow(selected);
     };
 
     //--------------------------------------------------------------------------
@@ -615,7 +616,7 @@
         if (!this.active) return;
         //if (TouchInput.isCancelled()) this.onCommandSelected("undo");
         this.updateScrollArrows();
-        this.updateMouseSelection();
+        //this.updateMouseSelection();
         this.updateMouseClick();
         if (Input.isRepeated("left")) this.cursorLeft();
         if (Input.isRepeated("right")) this.cursorRight();
@@ -630,13 +631,13 @@
     // Mouse Hover
     //--------------------------------------------------------------------------
 
-    Window_ActorCommand.prototype.updateMouseSelection = function() {
+    Window_ActorCommand.prototype.updateMouseSelection = function(sprite) {
         //if (!TouchInput.isMoved()) return;
-        if (!TouchInput.isTriggered()) return;
-        var x = TouchInput.x;
+        //if (!TouchInput.isTriggered()) return;
+        /* var x = TouchInput.x;
         var y = TouchInput.y;
         var localX = x - this.x;
-        var localY = y - this.y;
+        var localY = y - this.y; */
         /* var hovered = null;
         this._actionSprites.forEach(function(sprite) {
             //console.log("Update Mouse Selection:", sprite._uiData);
@@ -654,12 +655,12 @@
                 hovered = sprite;
             }
         }); */
-        var hovered = this.hitTestActionSprite(localX, localY);
-        console.log("Hovered:", hovered);
-        if (!hovered) return;
-        this._selection.region = hovered._uiData.region;
-        this._selection.row = hovered._uiData.row;
-        this._selection.column = hovered._uiData.column;
+        //var hovered = this.hitTestActionSprite(localX, localY);
+        //console.log("Hovered:", hovered);
+        if (!sprite) return;
+        this._selection.region = sprite._uiData.region;
+        this._selection.row = sprite._uiData.row;
+        this._selection.column = sprite._uiData.column;
         this.refreshSelection();
     };
 
@@ -679,11 +680,19 @@
             return;
         }
         console.log("CLICK: sprite region", sprite._uiData.region);
+        // Commands: single-click selection
         if (sprite._uiData.region === "commands") {
+            this.updateMouseSelection(sprite);
             this.onCommandSelected(sprite._uiData.command);
-        } else {
-            this.onActionSelected(sprite._uiData.action);
+            return;
         }
+        // Actions: first click highlights/previews, second click confirms
+        var hovered = this.currentSelectionSprite();
+        if (sprite !== hovered) {
+            this.updateMouseSelection(sprite);
+            return;
+        }
+        this.onActionSelected(sprite._uiData.action);
     };
 
     //--------------------------------------------------------------------------
@@ -1034,6 +1043,20 @@
         this.requestITBRefresh();
     };
 
+    //--------------------------------------------------------------------------
+    // Request Preview Update
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.updatePreviewWindow = function(sprite) {
+        var scene = SceneManager._scene;
+        if (!scene) return;
+        if (sprite && sprite._uiData.region === "actions") {
+            scene.updatePreviewWindow(sprite._uiData.action);
+        } else {
+            scene.updatePreviewWindow(null);
+        }
+    };
+
     //==========================================================================
     // Window_BattleSatus
     //==========================================================================
@@ -1271,6 +1294,81 @@
     };
 
     //==========================================================================
+    // Window_Preview
+    //==========================================================================
+
+    function Window_Preview() {
+        this.initialize.apply(this, arguments);
+    }
+
+    Window_Preview.prototype = Object.create(Window_Base.prototype);
+    Window_Preview.prototype.constructor = Window_Preview;
+
+    //--------------------------------------------------------------------------
+    // Initialization
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.initialize = function(numLines) {
+        var width = Graphics.boxWidth;
+        var height = this.fittingHeight(numLines || 4);
+        var x = 0;
+        var scene = SceneManager._scene;
+        if (scene && scene._statusWindow) {
+            var y = scene._statusWindow.y - height;
+        } else {
+            var y = 0;
+        }
+        Window_Base.prototype.initialize.call(this, x, y, width, height);
+        this._item = null;
+        this.hide();
+        this.deactivate();
+    };
+
+    //--------------------------------------------------------------------------
+    // Set Item
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.setItem = function(item) {
+        if (this._item === item) return;
+        this._item = item;
+        this.refresh();
+    };
+
+    //--------------------------------------------------------------------------
+    // Clear Item
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.clear = function() {
+        this.setItem(null);
+    };
+
+    //--------------------------------------------------------------------------
+    // Refresh Preview Window
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.refresh = function() {
+        this.contents.clear();
+        if (!this._item) return;
+        this.resetFontSettings();
+        var x = this.textPadding();
+        var y = 0;
+        var w = this.contentsWidth() - this.textPadding() * 2;
+        this.drawText(this._item.name, x, y, w);
+        y += this.lineHeight() + 6;
+        this.drawTextEx(this._item.description || "", x, y);
+    };
+
+    //--------------------------------------------------------------------------
+    // Layout helper
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.updateLayout = function() {
+        if (!SceneManager._scene || !SceneManager._scene._statusWindow) return;
+        this.x = 0;
+        this.y = SceneManager._scene._statusWindow.y - this.height;
+    };
+
+    //==========================================================================
     // Window_Base
     //==========================================================================
 
@@ -1383,6 +1481,7 @@
         ITB_Command_updateWindowPositions.call(this);
         // Fix position of battle status window
         this._statusWindow.updateLayout(this._actorCommandWindow.uiWindowHeight());
+        if (this._previewWindow) this._previewWindow.updateLayout();
     };
 
     //--------------------------------------------------------------------------
@@ -1449,6 +1548,40 @@
         var actor = BattleManager.actor();
         if (!actor) return;
         this._statusWindow.setTopRow(actor.index());
+    };
+
+    //--------------------------------------------------------------------------
+    // Create Preview Window
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.createPreviewWindow = function() {
+        var wx = 0;
+        var wy = this._statusWindow.y;
+        var ww = Graphics.boxWidth;
+        var wh = Graphics.boxHeight - wy;
+        this._previewWindow = new Window_Preview(wx, wy, ww, wh);
+        this.addWindow(this._previewWindow);
+    };
+
+    ITB_Command_SB_createAllWindows = Scene_Battle.prototype.createAllWindows;
+    Scene_Battle.prototype.createAllWindows = function() {
+        ITB_Command_SB_createAllWindows.call(this);
+        this.createPreviewWindow();
+    };
+
+    //--------------------------------------------------------------------------
+    // Update Preview Window
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.updatePreviewWindow = function(item) {
+        if (!this._previewWindow) return;
+        if (!item) {
+            this._previewWindow.clear();
+            this._previewWindow.hide();
+            return;
+        }
+        this._previewWindow.setItem(item);
+        this._previewWindow.show();
     };
 
 })();
