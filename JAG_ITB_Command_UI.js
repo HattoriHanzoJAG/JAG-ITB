@@ -200,6 +200,18 @@
         return this.getDisciplineRows();
     };
 
+    //--------------------------------------------------------------------------
+    // Queued action ID helper
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.queuedActionId = function() {
+        var actor = BattleManager.actor();
+        if (!actor) return 0;
+        var queued = actor.nextQueuedAction();
+        if (!queued || !queued.item()) return 0;
+        return queued.item().id;
+    };
+
     //==========================================================================
     // Window_ActorCommand
     //==========================================================================
@@ -347,29 +359,35 @@
 
     Window_ActorCommand.prototype.refreshSelection = function() {
         //this.ensureSelectionVisible();
+        console.log("Refresh Selection");
         var scale = this.uiIconScale();
         this._actionSprites.forEach(function(sprite) {
             sprite.scale.x = scale;
             sprite.scale.y = scale;
             sprite.opacity = 215;
             sprite.setBlendColor([0, 0, 0, 0]);
+            if (sprite._queueMarker) sprite._queueMarker.visible = false;
         });
         var selected = this.currentSelectionSprite();
-        //console.log("SELECT", selected);
-        if (!selected) {
+        console.log("SELECT", selected);
+        if (!selected || !selected._uiData) {
             //if (this._selectionBorder) this._selectionBorder.visible = false;
+            this.updatePreviewWindow(null);
             return;
         }
-        selected.opacity = 255;
-        selected.setBlendColor([255, 255, 100, 64]);
-        selected.scale.x = this.uiSelectScale();
-        selected.scale.y = this.uiSelectScale();
-        /* if (this._selectionBorder){
-            this._selectionBorder.x = selected.x - 3;
-            this._selectionBorder.y = selected.y - 3;
-            this._selectionBorder.visible = true;
-        } */
-        //console.log("Sprite highlighted");
+        var queuedId = BattleManager.ITB_UI.queuedActionId();
+        console.log("Preview ID:", queuedId);
+        if (selected._uiData.action) console.log("Action ID:", selected._uiData.action.id);
+        if (selected._uiData.region === "actions" && 
+            selected._uiData.action.id === queuedId) {
+                selected._queueMarker.visible = true;
+        } else {
+            // Don't highlight an action that has already been confirmed.
+            selected.opacity = 255;
+            selected.setBlendColor([255, 255, 100, 64]);
+            selected.scale.x = this.uiSelectScale();
+            selected.scale.y = this.uiSelectScale();
+        }
         this.updatePreviewWindow(selected);
     };
 
@@ -525,31 +543,18 @@
                     column: actionIndex,
                     action: actionData
                 };
+                // Queue marker
+                sprite._queueMarker = new Sprite(ImageManager.loadSystem("check-mark-32"));
+                sprite._queueMarker.anchor.x = 1;
+                sprite._queueMarker.anchor.y = 1;
+                sprite._queueMarker.x = Window_Base._iconWidth - 2;
+                sprite._queueMarker.y = Window_Base._iconHeight - 2;
+                sprite._queueMarker.visible = false;
+                sprite.addChild(sprite._queueMarker);
                 this.addChild(sprite);
                 this._actionSprites.push(sprite);
             }, this);
         }
-        /* rows.forEach(function(rowData, rowIndex) {
-            var icon = this.createIconSprite(rowData.iconIndex);
-            icon.x = startX;
-            icon.y = this.uiStartY() + rowIndex * this.uiSpacing();
-            this.addChild(icon);
-            this._actionSprites.push(icon);
-            rowData.actions.forEach(function(actionData, actionIndex) {
-                var sprite = this.createIconSprite(actionData.iconIndex);
-                sprite.x = startX + (actionIndex + 1) * this.uiSpacing() + 2;
-                sprite.y = this.uiStartY() + rowIndex * this.uiSpacing();
-                sprite._uiData = {
-                    region: "actions",
-                    row: rowIndex,
-                    column: actionIndex,
-                    action: actionData
-                };
-                //opacity = actionData.selectable ? 255 : 100
-                this.addChild(sprite);
-                this._actionSprites.push(sprite);
-            }, this);
-        }, this); */
     };
 
     //--------------------------------------------------------------------------
@@ -722,7 +727,7 @@
     };
 
     Window_ActorCommand.prototype.cursorUp = function() {
-        console.log("CURSOR UP", this._selection.row, this._scrollRow);
+        //console.log("CURSOR UP", this._selection.row, this._scrollRow);
         //if (this.selectedRegion() === "actions") this.scrollActions(-1);
         if (this.selectedRegion() === "actions") {
             this._selection.row--;
@@ -733,7 +738,7 @@
     };
 
     Window_ActorCommand.prototype.cursorDown = function() {
-        console.log("CURSOR DOWN", this._selection.row, this._scrollRow);
+        //console.log("CURSOR DOWN", this._selection.row, this._scrollRow);
         //if (this.selectedRegion() === "actions") this.scrollActions(1);
         if (this.selectedRegion() === "actions") {
             var rows = BattleManager.ITB_UI.getDisciplineRows();
@@ -803,6 +808,7 @@
     }; */
 
     Window_ActorCommand.prototype.onActionSelected = function(data) {
+        this.refreshSelection();
         var action = BattleManager.inputtingAction();
         if (!action) return;
         //console.log(SceneManager._scene._actorWindow.active);
@@ -821,6 +827,18 @@
         //console.log("ACTION", action.name);
         //BattleManager.ITB_UI.setSelectedAction(action);
     };
+
+    //--------------------------------------------------------------------------
+    // Preview helper
+    //--------------------------------------------------------------------------
+
+    /* Window_ActorCommand.prototype.isPreviewAction = function(actionData) {
+        var actor = BattleManager.actor();
+        if (!actor) return false;
+        var preview = actor.itbActionPreview();
+        if (!preview || !preview.item()) return false;
+        return preview.item().id === actionData.id;
+    }; */
 
     //--------------------------------------------------------------------------
     // Selection helpers
@@ -856,7 +874,7 @@
         var region = this._selection.region;
         var row = this._selection.row;
         var column = this._selection.column;
-        console.log(
+        /* console.log(
             "Looking for",
             this._selection.region,
             this._selection.row,
@@ -866,7 +884,7 @@
             this._actionSprites.map(function(s) {
                 return s._uiData;
             })
-        );
+        ); */
         return this._actionSprites.find(function(sprite) {
             //console.log("Current Selection Sprite");
             if (!sprite._uiData) return false;
@@ -1583,5 +1601,13 @@
         this._previewWindow.setItem(item);
         this._previewWindow.show();
     };
+
+    //--------------------------------------------------------------------------
+    // Refresh action interface
+    //--------------------------------------------------------------------------
+
+    //Scene_Battle.prototype.refreshUI = function(actor, action) {
+    //    if (this._actorCommandWindow) this._actorCommandWindow.refreshSelection();
+    //};
 
 })();
