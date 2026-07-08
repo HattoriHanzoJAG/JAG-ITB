@@ -204,13 +204,15 @@
     // Queued action ID helper
     //--------------------------------------------------------------------------
 
-    BattleManager.ITB_UI.queuedActionId = function() {
+    /* BattleManager.ITB_UI.queuedActionId = function() {
         var actor = BattleManager.actor();
         if (!actor) return 0;
-        var queued = actor.nextQueuedAction();
+        var data = actor.lastQueuedActionData();
+        if (!data) return 0;
+        var queued = actor.createActionFromQueueData(data);
         if (!queued || !queued.item()) return 0;
         return queued.item().id;
-    };
+    }; */
 
     //==========================================================================
     // Window_ActorCommand
@@ -357,9 +359,48 @@
         this._needsRefresh = true;
     };
 
+    Window_ActorCommand.prototype.confirmSelection = function() {
+        console.log("Confirm Selection");
+        this.clearSelectionHighlights();
+        var selected = this.currentSelectionSprite();
+        if (!selected || !selected._queueMarker) return;
+        selected.opacity = 255;
+        selected.setBlendColor([255, 255, 100, 64]);
+        selected._queueMarker.visible = true;
+        this.updatePreviewWindow(selected);
+    };
+
     Window_ActorCommand.prototype.refreshSelection = function() {
-        //this.ensureSelectionVisible();
         console.log("Refresh Selection");
+        this.clearSelectionHighlights();
+        var selected = this.currentSelectionSprite();
+        console.log("SELECT", selected);
+        if (!selected || !selected._uiData) {
+            //if (this._selectionBorder) this._selectionBorder.visible = false;
+            this.updatePreviewWindow(null);
+            return;
+        }
+        //var queuedId = BattleManager.ITB_UI.queuedActionId();
+        //console.log("Preview ID:", queuedId);
+        //if (selected._uiData.action) console.log("Action ID:", selected._uiData.action.id);
+        //if (selected._uiData.region === "actions" && 
+        //    selected._uiData.action.id === queuedId) {
+        //        selected._queueMarker.visible = true;
+        //} else {
+            // Don't highlight an action that has already been confirmed.
+        selected.opacity = 255;
+        selected.setBlendColor([255, 255, 100, 64]);
+        selected.scale.x = this.uiSelectScale();
+        selected.scale.y = this.uiSelectScale();
+        //}
+        this.updatePreviewWindow(selected);
+    };
+
+    //--------------------------------------------------------------------------
+    // Clear selection visuals
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.clearSelectionHighlights = function() {
         var scale = this.uiIconScale();
         this._actionSprites.forEach(function(sprite) {
             sprite.scale.x = scale;
@@ -368,27 +409,6 @@
             sprite.setBlendColor([0, 0, 0, 0]);
             if (sprite._queueMarker) sprite._queueMarker.visible = false;
         });
-        var selected = this.currentSelectionSprite();
-        console.log("SELECT", selected);
-        if (!selected || !selected._uiData) {
-            //if (this._selectionBorder) this._selectionBorder.visible = false;
-            this.updatePreviewWindow(null);
-            return;
-        }
-        var queuedId = BattleManager.ITB_UI.queuedActionId();
-        console.log("Preview ID:", queuedId);
-        if (selected._uiData.action) console.log("Action ID:", selected._uiData.action.id);
-        if (selected._uiData.region === "actions" && 
-            selected._uiData.action.id === queuedId) {
-                selected._queueMarker.visible = true;
-        } else {
-            // Don't highlight an action that has already been confirmed.
-            selected.opacity = 255;
-            selected.setBlendColor([255, 255, 100, 64]);
-            selected.scale.x = this.uiSelectScale();
-            selected.scale.y = this.uiSelectScale();
-        }
-        this.updatePreviewWindow(selected);
     };
 
     //--------------------------------------------------------------------------
@@ -547,8 +567,10 @@
                 sprite._queueMarker = new Sprite(ImageManager.loadSystem("check-mark-32"));
                 sprite._queueMarker.anchor.x = 1;
                 sprite._queueMarker.anchor.y = 1;
-                sprite._queueMarker.x = Window_Base._iconWidth - 2;
-                sprite._queueMarker.y = Window_Base._iconHeight - 2;
+                sprite._queueMarker.x = Window_Base._iconWidth + 3;
+                sprite._queueMarker.y = Window_Base._iconHeight + 4;
+                sprite._queueMarker.scale.x = 1.2;
+                sprite._queueMarker.scale.y = 1.2;
                 sprite._queueMarker.visible = false;
                 sprite.addChild(sprite._queueMarker);
                 this.addChild(sprite);
@@ -808,7 +830,7 @@
     }; */
 
     Window_ActorCommand.prototype.onActionSelected = function(data) {
-        this.refreshSelection();
+        //this.refreshSelection();
         var action = BattleManager.inputtingAction();
         if (!action) return;
         //console.log(SceneManager._scene._actorWindow.active);
@@ -1605,6 +1627,12 @@
     //--------------------------------------------------------------------------
     // Refresh action interface
     //--------------------------------------------------------------------------
+
+    ITB_Command_SB_queueConnectorAction = Scene_Battle.prototype.queueConnectorAction;
+    Scene_Battle.prototype.queueConnectorAction = function(actor, action) {
+        ITB_Command_SB_queueConnectorAction.call(this, actor, action);
+        if (this._actorCommandWindow) this._actorCommandWindow.confirmSelection();
+    };
 
     //Scene_Battle.prototype.refreshUI = function(actor, action) {
     //    if (this._actorCommandWindow) this._actorCommandWindow.refreshSelection();
