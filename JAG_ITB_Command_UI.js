@@ -99,7 +99,7 @@
         });
         return Object.keys(result).map(key => ({
             discipline: key,
-            iconIndex: BattleManager.ITB_UI.getDisciplineIcon(key),
+            image: BattleManager.ITB_UI.getDisciplineImage(key),
             actions: result[key]
         }));
     };
@@ -123,7 +123,7 @@
         });
         return Object.keys(result).map(key => ({
             discipline: key,
-            iconIndex: BattleManager.ITB_UI.getDisciplineIcon(key),
+            image: BattleManager.ITB_UI.getDisciplineImage(key),
             actions: result[key]
         }));
     };
@@ -136,7 +136,7 @@
     // Add discipline icon lookup
     //--------------------------------------------------------------------------
 
-    BattleManager.ITB_UI.getDisciplineIcon = function(discipline) {
+    /* BattleManager.ITB_UI.getDisciplineIcon = function(discipline) {
         var icons = {
             combat: 162,
             sorcery: 163,
@@ -146,7 +146,45 @@
             deception: 161
         };
         return icons[discipline] || 0;
+    }; */
+
+    BattleManager.ITB_UI.getDisciplineImage = function(discipline) {
+        var images = {
+            combat: "combat-30",
+            sorcery: "sorcery-30",
+            diplomacy: "diplomacy-30",
+            manoeuvre: "manoeuvre-30",
+            distance: "manoeuvre-30",
+            deception: "deception-30"
+        };
+        return images[discipline] || null;
     };
+
+    Window_Base.prototype.createSystemSprite = function(filename) {
+        var sprite = new Sprite(ImageManager.loadSystem(filename));
+        //sprite.scale.x = 0.5 / sprite.bitmap.width;
+        //sprite.scale.y = 0.5 / sprite.bitmap.height;
+        return sprite;
+    };
+
+    //--------------------------------------------------------------------------
+    // Get action discipline
+    //--------------------------------------------------------------------------
+
+    /* BattleManager.ITB_UI.getActionDiscipline = function(item) {
+        if (!item) return "combat";
+        console.log("Item", item);
+        //console.log("Type", item.type);
+        // Skills
+        if (item.type === "skill") {
+            return ($dataSystem.skillTypes[item.stypeId] || "Combat").toLowerCase();
+        }
+        // Items
+        if (item.type === "item") {
+            return item.meta.Discipline || "combat";
+        }
+        return "combat";
+    }; */
 
     //--------------------------------------------------------------------------
     // Vertical navigation
@@ -374,7 +412,7 @@
         console.log("Refresh Selection");
         this.clearSelectionHighlights();
         var selected = this.currentSelectionSprite();
-        console.log("SELECT", selected);
+        //console.log("SELECT", selected);
         if (!selected || !selected._uiData) {
             //if (this._selectionBorder) this._selectionBorder.visible = false;
             this.updatePreviewWindow(null);
@@ -548,9 +586,9 @@
         for (var rowIndex = first; rowIndex < last; rowIndex++) {
             var rowData = rows[rowIndex];
             var visibleRow = rowIndex - first;
-            var icon = this.createIconSprite(rowData.iconIndex);
+            var icon = this.createSystemSprite(rowData.image);
             icon.x = startX;
-            icon.y = this.uiStartY() + visibleRow * this.uiSpacing();
+            icon.y = this.uiStartY() + visibleRow * this.uiSpacing() + 1;
             this.addChild(icon);
             this._actionSprites.push(icon);
             rowData.actions.forEach(function(actionData, actionIndex) {
@@ -1345,6 +1383,17 @@
     Window_Preview.prototype.constructor = Window_Preview;
 
     //--------------------------------------------------------------------------
+    // Preview type window
+    //--------------------------------------------------------------------------
+
+    function Window_PreviewType() {
+        this.initialize.apply(this, arguments);
+    }
+
+    Window_PreviewType.prototype = Object.create(Window_Base.prototype);
+    Window_PreviewType.prototype.constructor = Window_PreviewType;
+
+    //--------------------------------------------------------------------------
     // Initialization
     //--------------------------------------------------------------------------
 
@@ -1354,14 +1403,54 @@
         var x = 0;
         var scene = SceneManager._scene;
         if (scene && scene._statusWindow) {
-            var y = scene._statusWindow.y - height;
+            var y = scene._statusWindow.y - height - 10;
         } else {
             var y = 0;
         }
         Window_Base.prototype.initialize.call(this, x, y, width, height);
         this._item = null;
+        this._badges = {};
+        this.createBadges();
         this.hide();
         this.deactivate();
+    };
+
+    Window_PreviewType.prototype.initialize = function() {
+        var width = 180;
+        var height = 32; // this.fittingHeight(1);
+        Window_Base.prototype.initialize.call(this, 0, 0, width, height);
+        this.createOpaqueBackground();
+        //this.opacity = 255;
+        //this.backOpacity = 255;
+        //this.standardBackOpacity = 255;
+        //this.contentsOpacity = 255;
+        this._text = "";
+    };
+
+    Window_PreviewType.prototype.standardFontSize = function() {
+        return 20;    // MV default is 28
+    };
+
+    Window_PreviewType.prototype.lineHeight = function() {
+        return 40;
+    };
+
+    Window_PreviewType.prototype.standardPadding = function() {
+        return 8;    // default is 18
+    };
+
+    //--------------------------------------------------------------------------
+    // Create badge sprites
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.createBadges = function() {
+        this._badges.aether = this.createBadge("aether-48", 0.9);
+        this._badges.initiative = this.createBadge("initiative-48");
+        this._badges.stamina = this.createBadge("stamina-48");
+        this._badges.defense = this.createBadge("defense-48");
+        this._badges.damage = this.createBadge("damage-48", 0.9);
+        this.createTypeWindow();
+        this.layoutBadges();
     };
 
     //--------------------------------------------------------------------------
@@ -1388,24 +1477,168 @@
 
     Window_Preview.prototype.refresh = function() {
         this.contents.clear();
-        if (!this._item) return;
-        this.resetFontSettings();
         var x = this.textPadding();
         var y = 0;
         var w = this.contentsWidth() - this.textPadding() * 2;
-        this.drawText(this._item.name, x, y, w);
-        y += this.lineHeight() + 6;
-        this.drawTextEx(this._item.description || "", x, y);
+        var item = this._item;
+        if (!item) return;
+        this.drawTitle(item);
+        //this.drawText(this._item.name, x, y, w);
+        //y += this.lineHeight() + 6;
+        //this.drawTextEx(this._item.description || "", x, y);
+        this.drawSeparator();
+        this.layoutBadges();
+    };
+
+    Window_PreviewType.prototype.refresh = function() {
+        this.contents.clear();
+        this.drawText(this._text, 0, 0, this.contentsWidth(), "center");
     };
 
     //--------------------------------------------------------------------------
-    // Layout helper
+    // Layout helpers
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.updateLayout = function() {
         if (!SceneManager._scene || !SceneManager._scene._statusWindow) return;
         this.x = 0;
-        this.y = SceneManager._scene._statusWindow.y - this.height;
+        this.y = SceneManager._scene._statusWindow.y - this.height - 10;
+        //this.standardBackOpacity = 255;
+        //this.backOpacity = 255;
+    };
+
+    Window_Preview.prototype.separatorX = function() {
+        return Math.floor(this.contentsWidth() * 0.55);
+    };
+
+    Window_Preview.prototype.layoutBadges = function() {
+        var topY = -12;
+        var bottomY = this.height - 36;
+        this._badges.aether.x = -2;
+        this._badges.aether.y = topY;
+        this._badges.initiative.x = this.width / 2 - 24;
+        this._badges.initiative.y = topY - 8;
+        this._badges.stamina.x = this.width - 46;
+        this._badges.stamina.y = topY;
+        this._badges.defense.x = -6;
+        this._badges.defense.y = bottomY + 2;
+        //this._badges.type.x = this.width / 2 - 90;
+        //this._badges.type.y = bottomY + 20;
+        this._typeWindow.x = this.width / 2 - 90;
+        this._typeWindow.y = bottomY + 15;
+        //this._typeWindow.opacity = 255;
+        //this._typeWindow.backOpacity = 255;
+        //this._typeWindow.standardBackOpacity = 255;
+        //this._typeWindow.alpha = 0.5;
+        //console.log(this._typeWindow);
+        //console.log(this._typeWindow.opacity);
+        //console.log(this._typeWindow.backOpacity);
+        this._badges.damage.x = this.width - 43;
+        this._badges.damage.y = bottomY + 4;
+    };
+
+    //--------------------------------------------------------------------------
+    // Creat badge helpers
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.createBadge = function(filename, scale) {
+        var sprite = new Sprite(ImageManager.loadSystem(filename));
+        if (!scale) scale = 1;
+        sprite.scale.x *= scale;
+        sprite.scale.y *= scale;
+        this.addChild(sprite);
+        return sprite;
+    };
+
+    Window_Preview.prototype.createTypeWindow = function() {
+        this._typeWindow = new Window_PreviewType();
+        //this._typeWindow.x = this.x + (this.width - this._typeWindow.width) / 2;
+        //this._typeWindow.y = this.y + this.height - this._typeWindow.height / 2;
+        this.addChild(this._typeWindow);
+        //console.log(this._typeWindow.backOpacity);
+        //console.log(this._typeWindow._dimmerSprite);
+        //console.log(this._typeWindow._windowBackSprite.visible);
+        //this._typeWindow._windowBackSprite.opacity = 0;
+        //this._typeWindow._windowBackSprite.alpha = 0;
+        //this._typeWindow.setBackgroundType(0);
+        //console.log(this._typeWindow._windowBackSprite.alpha);
+        //console.log(this._typeWindow._windowFrameSprite.alpha);
+        //this._typeWindow._windowBackSprite.children.forEach(function(child) {
+        //    child.alpha = 0;
+        //});
+        //this._typeWindow._windowFrameSprite.alpha = 0;
+        //SceneManager._scene.addWindow(this._typeWindow);
+    };
+
+    Window_PreviewType.prototype.createOpaqueBackground = function() {
+        var sprite = new Sprite(new Bitmap(this.width, this.height));
+        sprite.bitmap.fillRect(
+            4, 
+            4, 
+            this.width - 8, 
+            this.height - 8, 
+            "rgba(81, 77, 82, 1.0)"
+        );
+        this._windowSpriteContainer.addChildAt(sprite, 0);
+        this._opaqueBackground = sprite;
+    };
+
+    //Window_Preview.prototype.createTypeBadge = function() {
+        //var sprite = new Sprite(new Bitmap(180, 18));
+        //sprite.bitmap.fillAll("white");
+        //var sprite = new Sprite();
+        //var background = new Sprite(ImageManager.loadSystem("Window"));
+        //sprite.addChild(background);
+        //var text = new Sprite(new Bitmap(180, 18));
+        //sprite._textSprite = text;
+        //sprite.addChild(text);
+    //    var sprite = new Sprite(new Bitmap(180, 24));
+    //    this.drawWindowFrame(sprite.bitmap);
+    //    this.addChild(sprite);
+    //    return sprite;
+    //};
+
+    //Window_Preview.prototype.drawWindowFrame = function(bitmap) {
+    //    var skin = this.windowskin;
+    //    bitmap.blt(skin, 96, 0, 48, 48, 0, 0, bitmap.width, bitmap.height);
+    //};
+
+    //--------------------------------------------------------------------------
+    // Set preview text
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawTitle = function(item) {
+        var discipline = BattleManager.ITB_UI.getDisciplineImage(item.discipline);
+        //var string = BattleManager.ITB_UI.getActionDiscipline(item);
+        //console.log("Discipline", string);
+        //console.log("Image", discipline);
+        var iconSize = 28;
+        var spacing = 8;
+        this.contents.fontSize = 26;
+        var textWidth = this.textWidth(item.name);
+        var totalWidth = iconSize + spacing + textWidth;
+        var x = Math.floor((this.contentsWidth() - totalWidth) / 2);
+        var y = 2;
+        this.drawSystemImage(discipline, x, y, iconSize);
+        this.drawText(item.name, x + iconSize + spacing, y, totalWidth, "left");
+        this.resetFontSettings();
+    };
+
+    Window_PreviewType.prototype.setText = function(text) {
+        if (this._text === text) return;
+        this._text = text;
+        this.refresh();
+    };
+
+    //--------------------------------------------------------------------------
+    // Draw separator
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawSeparator = function() {
+        var x = this.separatorX();
+        var y = this.lineHeight();
+        var h = this.fittingHeight(1.5);//this.lineHeight() + this.fittingHeight(1);
+        this.contents.fillRect(x, y, 2, h, this.normalColor());
     };
 
     //==========================================================================
@@ -1481,10 +1714,10 @@
             var row = Math.floor(i / 3);
             var drawX = x + col * spacing;
             var drawY = y + row * iconSize + 2;
-            var icon = BattleManager.ITB_UI.getDisciplineIcon(name);
-            var value = actor.connector(name);
+            var icon = BattleManager.ITB_UI.getDisciplineImage(name);
             //console.log("Icon:", icon);
-            this.drawScaledIcon(icon, drawX, drawY, iconSize);
+            this.drawSystemImage(icon, drawX, drawY, iconSize);
+            var value = actor.connector(name);
             this.drawText(
                 value === undefined ? "-" : value,
                 drawX + iconSize + 2,
@@ -1494,6 +1727,19 @@
             );
         }, this);
         this.resetFontSettings();
+    };
+
+    Window_Base.prototype.drawSystemImage = function(filename, x, y, size) {
+        var bitmap = ImageManager.loadSystem(filename);
+        if (!bitmap.isReady()) {
+            bitmap.addLoadListener(function() {
+                this.drawSystemImage(filename, x, y, size);
+            }.bind(this));
+            return;
+        }
+        var width = size || bitmap.width;
+        var height = size || bitmap.height;
+        this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x, y, width, height);
     };
 
     //==========================================================================
@@ -1637,5 +1883,19 @@
     //Scene_Battle.prototype.refreshUI = function(actor, action) {
     //    if (this._actorCommandWindow) this._actorCommandWindow.refreshSelection();
     //};
+
+    /* var ITB_Command_WB_initialize = Window_Base.prototype.initialize;
+    Window_Base.prototype.initialize = function() {
+        ITB_Command_WB_initialize.call(this);
+        this.backOpacity = 255;
+    }
+
+    Window_Base.prototype.standardBackOpacity = function() {
+        return 255;
+    };
+
+    Window_Preview.prototype.standardBackOpacity = function() {
+        return 255;
+    }; */
 
 })();
