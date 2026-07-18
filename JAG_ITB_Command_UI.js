@@ -168,6 +168,17 @@
     };
 
     //--------------------------------------------------------------------------
+    // Reconstruct action object
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.databaseAction = function(actionData) {
+        if (!actionData) return null;
+        if (actionData.type === "skill") return $dataSkills[actionData.id];
+        if (actionData.type === "item") return $dataItems[actionData.id];
+        return null;
+    };
+
+    //--------------------------------------------------------------------------
     // Get action discipline
     //--------------------------------------------------------------------------
 
@@ -236,6 +247,61 @@
 
     BattleManager.ITB_UI.getVisibleActions = function() {
         return this.getDisciplineRows();
+    };
+
+    //--------------------------------------------------------------------------
+    // Initiative helper
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.actionInitiativeCost = function(item) {
+        console.log("Item", item);
+        if (!item) return 0;
+        console.log("Meta", item.meta);
+        // Skill
+        if (item.meta && item.meta.Initiative) {
+            console.log("Initiative", item.meta.Initiative);
+            return Number(item.meta.Initiative) || 0;
+        }
+        // Fallback
+        return 0;
+    };
+
+    //--------------------------------------------------------------------------
+    // Damage helpers
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.actionAttackInfo = function(actor, item) {
+        if (!actor || !item) return null;
+        //console.log("Damage", item.damage);
+        if (!item.damage || item.damage.type <= 0) return null;
+        var formula = item.damage.formula;
+        //console.log("Formula", formula);
+        if (!formula) return null;
+        var attackFormula = this.extractAttackFormula(formula);
+        //console.log("Attack Formula", attackFormula);
+        if (!attackFormula) return null;
+        var a = actor;
+        var v = $gameVariables._data;
+        try {
+            var total = Math.round(eval(attackFormula));
+            var bonus = total - actor.atk;
+            return {total: total, bonus: bonus};
+        } catch (e) {
+            console.warn("Failed to evaluate attack formula:", attackFormula, e);
+            return null;
+        }
+    };
+
+    BattleManager.ITB_UI.extractAttackFormula = function(formula) {
+        if (!formula) return "";
+        // Normalize subtraction:
+        // "3*a.atk/2 - b.def + 20" -> "3*a.atk/2 + - b.def + 20"
+        var normalized = formula.replace(/-/g, "+-");
+        var terms = normalized.split("+");
+        var attackTerms = terms.filter(function(term) {
+            return term.indexOf("a.atk") >= 0;
+        });
+        return attackTerms.join(" + ");
     };
 
     //--------------------------------------------------------------------------
@@ -1129,9 +1195,9 @@
         var scene = SceneManager._scene;
         if (!scene) return;
         if (sprite && sprite._uiData.region === "actions") {
-            scene.updatePreviewWindow(sprite._uiData.action);
+            scene.updatePreviewWindow(BattleManager.actor(), sprite._uiData.action);
         } else {
-            scene.updatePreviewWindow(null);
+            scene.updatePreviewWindow(null, null);
         }
     };
 
@@ -1457,9 +1523,11 @@
     // Set Item
     //--------------------------------------------------------------------------
 
-    Window_Preview.prototype.setItem = function(item) {
-        if (this._item === item) return;
+    Window_Preview.prototype.setAction = function(actor, item) {
+        if (this._actor === actor && this._item === item) return;
+        this._actor = actor;
         this._item = item;
+        //this._data = actionData;
         this.refresh();
     };
 
@@ -1468,7 +1536,7 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.clear = function() {
-        this.setItem(null);
+        this.setAction(null, null);
     };
 
     //--------------------------------------------------------------------------
@@ -1488,6 +1556,16 @@
         //this.drawTextEx(this._item.description || "", x, y);
         this.drawSeparator();
         this.layoutBadges();
+        if (this._item) this.refreshBadges();
+    };
+
+    Window_Preview.prototype.refreshBadges = function() {
+        this.refreshInitiativeBadge();
+        this.refreshAetherBadge();
+        this.refreshStaminaBadge();
+        this.refreshDamageBadge();
+        this.refreshDefenseBadge();
+        this.refreshTypeWindow();
     };
 
     Window_PreviewType.prototype.refresh = function() {
@@ -1514,6 +1592,11 @@
     Window_Preview.prototype.layoutBadges = function() {
         var topY = -12;
         var bottomY = this.height - 36;
+        console.log(
+            "Aether badge:",
+            this._badges.aether.x,
+            this._badges.aether.y
+        );
         this._badges.aether.x = -2;
         this._badges.aether.y = topY;
         this._badges.initiative.x = this.width / 2 - 24;
@@ -1537,15 +1620,148 @@
         this._badges.damage.y = bottomY + 4;
     };
 
+    var ITB_Command_SB_loadSystemImages = Scene_Boot.prototype.loadSystemImages;
+    Scene_Boot.prototype.loadSystemImages = function() {
+        ITB_Command_SB_loadSystemImages.call(this);
+        Graphics.loadFont(
+            "Roboto Slab Black",
+            "fonts/RobotoSlab-Black.ttf"
+        );
+    };
+
+    Window_Preview.prototype.badgeFontFace = function() {
+        return "Rockwell";
+    };
+
+    //--------------------------------------------------------------------------
+    // Refresh helpers
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.refreshInitiativeBadge = function() {
+        var badge = this._badges.initiative;
+        if (!badge) return;
+        badge.visible = !!this._item;
+        var initiative = BattleManager.ITB_UI.actionInitiativeCost(this._item);
+        this.drawBadgeValue(badge, initiative, 0, 14, badge._value.bitmap.width, 24);
+    };
+
+    Window_Preview.prototype.refreshAetherBadge = function() {
+        var badge = this._badges.aether;
+        if (!badge) return;
+        var cost = this._item ? this._item.tpCost : -1;
+        badge.visible = cost > 0;
+        if (!badge.visible) return;
+        this.drawBadgeValue(badge, cost, 0, 10, badge._value.bitmap.width, 24);
+    };
+
+    Window_Preview.prototype.refreshStaminaBadge = function() {
+        var badge = this._badges.stamina;
+        if (!badge) return;
+        var value = 10;
+        badge.visible = value > 0;
+        if (!badge.visible) return;
+        this.drawBadgeValue(badge, value, 0, 10, badge._value.bitmap.width, 24);
+    };
+
+    Window_Preview.prototype.refreshDamageBadge = function() {
+        console.log("Refresh Damage Badge");
+        var badge = this._badges.damage;
+        if (!badge) return;
+        var info = BattleManager.ITB_UI.actionAttackInfo(this._actor, this._item);
+        console.log("Visible", !!info);
+        badge.visible = !!info;
+        if (!info) return;
+        var total = info.total;
+        console.log("Total", total);
+        this.drawBadgeValue(badge, total, 0, 3, badge._value.bitmap.width, 24);
+        var bonus = "+" + info.bonus;
+        console.log("Bonus", bonus);
+        this.drawBadgeBonus(badge, bonus, -2, 4, badge._bonus.bitmap.width, 16);
+    };
+
+    Window_Preview.prototype.refreshDefenseBadge = function() {
+        console.log("Refresh Defense Badge");
+        var badge = this._badges.defense;
+        if (!badge) return;
+        var guard = this._item && this._item.meta && this._item.meta.Guard;
+        console.log("Visible", !!guard);
+        badge.visible = !!guard;
+        if (!guard) return;
+        var total = this._actor.def;
+        var bonus = Number(guard);
+        this.drawBadgeValue(badge, total, 0, 2, badge._value.bitmap.width, 24);
+        this.drawBadgeBonus(badge, bonus, 0, 2, badge._bonus.bitmap.width, 16);
+    };
+
+    Window_Preview.prototype.refreshTypeWindow = function() {
+        if (!this._typeWindow) return;
+        if (!this._item) {
+            this._typeWindow.hide();
+            return;
+        }
+        var parts = [];
+        if (this._item.damage && this._item.damage.elementId > 0) {
+            parts.push($dataSystem.elements[this._item.damage.elementId]);
+        }
+        if (this._item.stypeId) {
+            parts.push($dataSystem.skillTypes[this._item.stypeId]);
+        }
+        var text = parts.join(" • ");
+        if (!text) {
+            this._typeWindow.hide();
+            return;
+        }
+        this._typeWindow.show();
+        this._typeWindow.contents.clear();
+        this._typeWindow.contents.fontSize = 16;
+        this._typeWindow.drawText(
+            text,
+            0,
+            -12,
+            this._typeWindow.contentsWidth(),
+            "center"
+        );
+    };
+
     //--------------------------------------------------------------------------
     // Creat badge helpers
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.createBadge = function(filename, scale) {
+        /* var container = new Sprite();
+        container._icon = new Sprite(ImageManager.loadSystem(filename));
+        if (!scale) scale = 1;
+        container._icon.bitmap.addLoadListener(function() {
+            var w = container._icon.bitmap.width;
+            var h = container._icon.bitmap.height;
+            container._icon.x = w / 2;
+            container._icon.y = h / 2;
+            container._value.x = w / 2 - 24;
+            container._value.y = 8;
+            container._bonus.x = w / 2 - 24;
+            container._bonus.y = 28;
+        });
+        container._icon.anchor.x = 0.5;
+        container._icon.anchor.y = 0.5;
+        container._icon.scale.x = scale;
+        container._icon.scale.y = scale;
+        this.addChild(container._icon);
+        container._value = new Sprite(new Bitmap(48, 32));
+        container.addChild(container._value);
+        container._bonus = new Sprite(new Bitmap(48, 16));
+        container.addChild(container._bonus);
+        this.addChild(container);
+        return container; */
         var sprite = new Sprite(ImageManager.loadSystem(filename));
         if (!scale) scale = 1;
         sprite.scale.x *= scale;
         sprite.scale.y *= scale;
+        sprite._value = new Sprite(new Bitmap(48, 40));
+        sprite.addChild(sprite._value);
+        sprite._bonus = new Sprite(new Bitmap(48, 28));
+        sprite.addChild(sprite._bonus);
+        sprite._value.y = -2;
+        sprite._bonus.y = 24;
         this.addChild(sprite);
         return sprite;
     };
@@ -1639,6 +1855,30 @@
         var y = this.lineHeight();
         var h = this.fittingHeight(1.5);//this.lineHeight() + this.fittingHeight(1);
         this.contents.fillRect(x, y, 2, h, this.normalColor());
+    };
+
+    //--------------------------------------------------------------------------
+    // Draw badge helpers
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawBadgeValue = function(badge, text, x, y, w, h) {
+        badge._value.bitmap.clear();
+        badge._value.bitmap.fontFace = this.badgeFontFace();
+        //this.contents.fontBold = true;
+        badge._value.bitmap.fontBold = true;
+        badge._value.bitmap.fontSize = 30;
+        badge._value.bitmap.outlineWidth = 8;
+        badge._value.bitmap.drawText(String(text), x, y, w, h, "center");
+        //this.contents.fontBold = false;
+    };
+
+    Window_Preview.prototype.drawBadgeBonus = function(badge, text, x, y, w, h) {
+        badge._bonus.bitmap.clear();
+        badge._bonus.bitmap.fontFace = this.badgeFontFace();
+        badge._bonus.bitmap.fontBold = true;
+        badge._bonus.bitmap.fontSize = 22;
+        badge._value.bitmap.outlineWidth = 8;
+        badge._bonus.bitmap.drawText(String(text), x, y, w, h, "center");
     };
 
     //==========================================================================
@@ -1859,14 +2099,15 @@
     // Update Preview Window
     //--------------------------------------------------------------------------
 
-    Scene_Battle.prototype.updatePreviewWindow = function(item) {
+    Scene_Battle.prototype.updatePreviewWindow = function(actor, actionData) {
         if (!this._previewWindow) return;
-        if (!item) {
+        if (!actionData) {
             this._previewWindow.clear();
             this._previewWindow.hide();
             return;
         }
-        this._previewWindow.setItem(item);
+        var item = BattleManager.ITB_UI.databaseAction(actionData);
+        this._previewWindow.setAction(actor, item);
         this._previewWindow.show();
     };
 
