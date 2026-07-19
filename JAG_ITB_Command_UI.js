@@ -277,7 +277,7 @@
         var formula = item.damage.formula;
         //console.log("Formula", formula);
         if (!formula) return null;
-        var attackFormula = this.extractAttackFormula(formula);
+        var attackFormula = this.extractFormula(formula, "a.atk");
         //console.log("Attack Formula", attackFormula);
         if (!attackFormula) return null;
         var a = actor;
@@ -292,14 +292,36 @@
         }
     };
 
-    BattleManager.ITB_UI.extractAttackFormula = function(formula) {
+    BattleManager.ITB_UI.actionInfluenceInfo = function(actor, item) {
+        if (!actor || !item) return null;
+        //console.log("Damage", item.damage);
+        if (!item.damage || item.damage.type <= 0) return null;
+        var formula = item.damage.formula;
+        //console.log("Formula", formula);
+        if (!formula) return null;
+        var influenceFormula = this.extractFormula(formula, "a.mat");
+        //console.log("Attack Formula", attackFormula);
+        if (!influenceFormula) return null;
+        var a = actor;
+        var v = $gameVariables._data;
+        try {
+            var total = Math.round(eval(influenceFormula));
+            var bonus = total - actor.mat;
+            return {total: total, bonus: bonus};
+        } catch (e) {
+            console.warn("Failed to evaluate attack formula:", influenceFormula, e);
+            return null;
+        }
+    };
+
+    BattleManager.ITB_UI.extractFormula = function(formula, text) {
         if (!formula) return "";
         // Normalize subtraction:
         // "3*a.atk/2 - b.def + 20" -> "3*a.atk/2 + - b.def + 20"
         var normalized = formula.replace(/-/g, "+-");
         var terms = normalized.split("+");
         var attackTerms = terms.filter(function(term) {
-            return term.indexOf("a.atk") >= 0;
+            return term.indexOf(text) >= 0;
         });
         return attackTerms.join(" + ");
     };
@@ -1510,11 +1532,13 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.createBadges = function() {
-        this._badges.aether = this.createBadge("aether-48", 0.9);
+        this._badges.aether = this.createBadge("aether-48");
         this._badges.initiative = this.createBadge("initiative-48");
         this._badges.stamina = this.createBadge("stamina-48");
-        this._badges.defense = this.createBadge("defense-48");
-        this._badges.damage = this.createBadge("damage-48", 0.9);
+        this._badges.defense = this.createBadge("defense-60");
+        this._badges.defiance = this.createBadge("defiance-60");
+        this._badges.damage = this.createBadge("damage-48");
+        this._badges.corruption = this.createBadge("corruption-48");
         this.createTypeWindow();
         this.layoutBadges();
     };
@@ -1564,7 +1588,9 @@
         this.refreshAetherBadge();
         this.refreshStaminaBadge();
         this.refreshDamageBadge();
+        this.refreshCorruptionBadge();
         this.refreshDefenseBadge();
+        this.refreshDefianceBadge();
         this.refreshTypeWindow();
     };
 
@@ -1598,13 +1624,15 @@
             this._badges.aether.y
         );
         this._badges.aether.x = -2;
-        this._badges.aether.y = topY;
+        this._badges.aether.y = topY - 2;
         this._badges.initiative.x = this.width / 2 - 24;
         this._badges.initiative.y = topY - 8;
         this._badges.stamina.x = this.width - 46;
         this._badges.stamina.y = topY;
         this._badges.defense.x = -6;
-        this._badges.defense.y = bottomY + 2;
+        this._badges.defense.y = bottomY - 10;
+        this._badges.defiance.x = -6;
+        this._badges.defiance.y = bottomY - 10;
         //this._badges.type.x = this.width / 2 - 90;
         //this._badges.type.y = bottomY + 20;
         this._typeWindow.x = this.width / 2 - 90;
@@ -1616,8 +1644,10 @@
         //console.log(this._typeWindow);
         //console.log(this._typeWindow.opacity);
         //console.log(this._typeWindow.backOpacity);
-        this._badges.damage.x = this.width - 43;
-        this._badges.damage.y = bottomY + 4;
+        this._badges.damage.x = this.width - 49;
+        this._badges.damage.y = bottomY - 2;
+        this._badges.corruption.x = this.width - 49;
+        this._badges.corruption.y = bottomY - 2;
     };
 
     var ITB_Command_SB_loadSystemImages = Scene_Boot.prototype.loadSystemImages;
@@ -1651,13 +1681,13 @@
         var cost = this._item ? this._item.tpCost : -1;
         badge.visible = cost > 0;
         if (!badge.visible) return;
-        this.drawBadgeValue(badge, cost, 0, 10, badge._value.bitmap.width, 24);
+        this.drawBadgeValue(badge, cost, 0, 12, badge._value.bitmap.width, 24);
     };
 
     Window_Preview.prototype.refreshStaminaBadge = function() {
         var badge = this._badges.stamina;
         if (!badge) return;
-        var value = 10;
+        var value = 0;
         badge.visible = value > 0;
         if (!badge.visible) return;
         this.drawBadgeValue(badge, value, 0, 10, badge._value.bitmap.width, 24);
@@ -1679,6 +1709,27 @@
         this.drawBadgeBonus(badge, bonus, -2, 4, badge._bonus.bitmap.width, 16);
     };
 
+    Window_Preview.prototype.refreshCorruptionBadge = function() {
+        console.log("Refresh Corruption Badge");
+        var badge = this._badges.corruption;
+        if (!badge) return;
+        if (this._badges.damage.visible) {
+            badge.x = this.width - 99;
+        } else {
+            badge.x = this.width - 49;
+        }
+        var info = BattleManager.ITB_UI.actionInfluenceInfo(this._actor, this._item);
+        console.log("Visible", !!info);
+        badge.visible = !!info;
+        if (!info) return;
+        var total = info.total;
+        console.log("Total", total);
+        this.drawBadgeValue(badge, total, 0, 3, badge._value.bitmap.width, 24);
+        var bonus = "+" + info.bonus;
+        console.log("Bonus", bonus);
+        this.drawBadgeBonus(badge, bonus, -2, 4, badge._bonus.bitmap.width, 16);
+    };
+
     Window_Preview.prototype.refreshDefenseBadge = function() {
         console.log("Refresh Defense Badge");
         var badge = this._badges.defense;
@@ -1688,9 +1739,28 @@
         badge.visible = !!guard;
         if (!guard) return;
         var total = this._actor.def;
-        var bonus = Number(guard);
-        this.drawBadgeValue(badge, total, 0, 2, badge._value.bitmap.width, 24);
-        this.drawBadgeBonus(badge, bonus, 0, 2, badge._bonus.bitmap.width, 16);
+        var bonus = "+" + Number(guard);
+        this.drawBadgeValue(badge, total, 6, 10, badge._value.bitmap.width, 24);
+        this.drawBadgeBonus(badge, bonus, 4, 10, badge._bonus.bitmap.width, 16);
+    };
+
+    Window_Preview.prototype.refreshDefianceBadge = function() {
+        console.log("Refresh Defiance Badge");
+        var badge = this._badges.defiance;
+        if (!badge) return;
+        if (this._badges.defense.visible) {
+            badge.x = 44;
+        } else {
+            badge.x = -6;
+        }
+        var composure = this._item && this._item.meta && this._item.meta.Composure;
+        console.log("Visible", !!composure);
+        badge.visible = !!composure;
+        if (!composure) return;
+        var total = this._actor.mdf;
+        var bonus = "+" + Number(composure);
+        this.drawBadgeValue(badge, total, 6, 10, badge._value.bitmap.width, 24);
+        this.drawBadgeBonus(badge, bonus, 4, 10, badge._bonus.bitmap.width, 16);
     };
 
     Window_Preview.prototype.refreshTypeWindow = function() {
@@ -1866,7 +1936,7 @@
         badge._value.bitmap.fontFace = this.badgeFontFace();
         //this.contents.fontBold = true;
         badge._value.bitmap.fontBold = true;
-        badge._value.bitmap.fontSize = 30;
+        badge._value.bitmap.fontSize = 30 / badge.scale.y;
         badge._value.bitmap.outlineWidth = 8;
         badge._value.bitmap.drawText(String(text), x, y, w, h, "center");
         //this.contents.fontBold = false;
@@ -1876,7 +1946,7 @@
         badge._bonus.bitmap.clear();
         badge._bonus.bitmap.fontFace = this.badgeFontFace();
         badge._bonus.bitmap.fontBold = true;
-        badge._bonus.bitmap.fontSize = 22;
+        badge._bonus.bitmap.fontSize = 22 / badge.scale.y;
         badge._value.bitmap.outlineWidth = 8;
         badge._bonus.bitmap.drawText(String(text), x, y, w, h, "center");
     };
