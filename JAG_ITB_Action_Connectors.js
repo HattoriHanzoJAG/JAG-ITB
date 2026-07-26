@@ -32,7 +32,7 @@
 (function() {
 
     const TRACE_CONNECTORS = true;
-    const DEBUG_CONNECTORS = true;
+    const DEBUG_CONNECTORS = false;
 
     //=============================================================================
     // Database Loading
@@ -245,7 +245,7 @@
         if (actor.queueLength() <= 0) {
             return actor._selectedTarget.connectorState();
         }
-        var last = actor._actionQueue[actor._actionQueue.length - 1];;
+        var last = actor.lastQueuedActionData();
         return JsonEx.makeDeepCopy(last.resultState);
     };
 
@@ -257,11 +257,9 @@
             console.log("preview target:", actor._connectorPreviewTarget);
         }
         if (!actor) return null;
-        if (actor._actionQueue.length > 0) {
-            var last = actor._actionQueue[actor._actionQueue.length - 1];
-            if (last && last.resultState) {
-                return JsonEx.makeDeepCopy(last.resultState);
-            }
+        var last = actor.lastQueuedActionData();
+        if (last && last.resultState) {
+            return JsonEx.makeDeepCopy(last.resultState);
         }
         // First action target preview
         if (actor._connectorPreviewTarget) {
@@ -277,8 +275,6 @@
             if (DEBUG_CONNECTORS) console.log(new Error().stack);
         }
         var actor = this.actor();
-        var action = this.inputtingAction();
-        if (!action || !action.item()) return;
         if (DEBUG_CONNECTORS) {
             console.log("actor:", actor ? actor.name() : null);
             console.log("action:", action);
@@ -292,9 +288,6 @@
                 }
             );
         }
-        // -------------------------------------------------
-        // STORE TARGET + RESULT STATE + ACTION QUEUE
-        // -------------------------------------------------
         if (DEBUG_CONNECTORS) {
             console.log(
                 "COMMAND_SELECTION_STATE",
@@ -303,31 +296,15 @@
                 actor._queueInputActive
             );
         }
-        if (actor && action && actor._connectorPreviewTarget) {
-            if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("AUTO QUEUE CONNECTOR ACTION");
-            var target = actor._connectorPreviewTarget;
-            // Inject stored target for action requiring target selection
-            if (action.needsSelection()) {
-                if (DEBUG_CONNECTORS) console.log("Store target");
-                action.setTarget(target.index());
-            }
-            // Build queue entry and connector result state
-            SceneManager._scene._queueAction(
-                action,
-                target,
-                action.isForOpponent() ? "enemy" : "ally"
-            );
-            if (DEBUG_CONNECTORS) console.log("Queue length:", actor.queueLength()); 
-        }
+        var action = this.inputtingAction();
+        if (!action || !action.item()) return;
+        // -------------------------------------------------
+        // STORE TARGET + RESULT STATE + ACTION QUEUE
+        // -------------------------------------------------
+        SceneManager._scene.queueConnectorAction(actor, action);
         // Return to queue input mode
         if (actor && actor._queueInputActive) {
-            if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("RETURN TO COMMAND INPUT");
-            SceneManager._scene._skillWindow.hide();
-            SceneManager._scene._itemWindow.hide();
-            SceneManager._scene._enemyWindow.hide();
-            SceneManager._scene._actorWindow.hide();
-            SceneManager._scene._actorCommandWindow.show();
-            SceneManager._scene._actorCommandWindow.activate();
+            SceneManager._scene.returnToCommandInput();
             return;
         }
         // -------------------------------------------------
@@ -370,6 +347,16 @@
     *   Invalid (missing strict distance connector)
     */
 
+    Game_Battler.prototype.connectorNames = function() {
+        return [
+            "combat",
+            "sorcery",
+            "deception",
+            "diplomacy",
+            "distance"
+        ];
+    };  
+
     Connector_GB_initMembers = Game_Battler.prototype.initMembers;
     Game_Battler.prototype.initMembers = function() {
         Connector_GB_initMembers.call(this);
@@ -404,7 +391,7 @@
         return state;
     };
 
-    Game_Battler.prototype.resolveConnectorSourceState = function(actionData) {
+    /* Game_Battler.prototype.resolveConnectorSourceState = function(actionData) {
         // First queued action
         if (this._actionQueue.length <= 0) {
             var target = this.resolveActionTarget(actionData);
@@ -412,9 +399,9 @@
             return target.connectorState();
         }
         // Chained action
-        var previous = this._actionQueue[this._actionQueue.length - 1];
+        var previous = this.lastQueuedActionData();
         return previous.resultState || null;
-    };
+    }; */
 
     Game_Battler.prototype.printBattleConnectors = function() {
         console.log("Print Battle Connectors")
@@ -481,6 +468,11 @@
             this._lastQueuedConnectorState = null;
         }
         return removed;
+    };
+
+    Game_Battler.prototype.lastQueuedActionData = function() {
+        if (!this._actionQueue || this._actionQueue.length === 0) return null;
+        return this._actionQueue[this._actionQueue.length - 1];
     };
 
     //=============================================================================
@@ -781,16 +773,20 @@
         // ----------------------------------
         if (BattleManager._connectorTargetMode) {
             if (DEBUG_CONNECTORS) console.log("Connector Target Preselection");
-            actor._connectorPreviewTarget = this._enemyWindow.enemy();
+            var target = this._enemyWindow.enemy()
+            actor._connectorPreviewTarget = target;
+            actor._connectorPreviewTargetSprite = this.CacheTargetImageExtension(target);
             actor._queueInputActive = true;
             BattleManager._connectorTargetMode = false;
             this._enemyWindow.hide();
             this._enemyWindow.deactivate();
-            actor._connectorPreviewTarget.deselect();
-            console.log(
-                actor._connectorPreviewTarget,
-                actor._connectorPreviewTarget.isSelected()
-            );
+            target.deselect();
+            if (DEBUG_CONNECTORS) {
+                console.log(
+                    actor._connectorPreviewTarget,
+                    actor._connectorPreviewTarget.isSelected()
+                );
+            }
             return;
         }
         Connector_SB_onEnemyOk.call(this);
@@ -961,6 +957,30 @@
         Connector_SB_selectEnemySelection.call(this);
     };
 
+    Scene_Battle.prototype.queueConnectorAction = function(actor, action) {
+        if (!actor || !action || !actor._connectorPreviewTarget) return;
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("AUTO QUEUE CONNECTOR ACTION");
+        var target = actor._connectorPreviewTarget;
+        // Inject stored target for action requiring target selection
+        if (action.needsSelection()) {
+            if (DEBUG_CONNECTORS) console.log("Store target");
+            action.setTarget(target.index());
+        }
+        // Build queue entry and connector result state
+        this._queueAction(action, target, action.isForOpponent() ? "enemy" : "ally");
+        if (DEBUG_CONNECTORS) console.log("Queue length:", actor.queueLength()); 
+    };
+
+    Scene_Battle.prototype.returnToCommandInput = function() {
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("RETURN TO COMMAND INPUT");
+        this._skillWindow.hide();
+        this._itemWindow.hide();
+        this._enemyWindow.hide();
+        this._actorWindow.hide();
+        this._actorCommandWindow.show();
+        this._actorCommandWindow.activate();
+    };
+
     var Connector_BM_selectPrevious = Scene_Battle.selectPreviousCommand;
     Scene_Battle.selectPreviousCommand = function() {
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("Select Previous Command");
@@ -981,6 +1001,11 @@
         if (!actor || !actor._connectorPreviewTarget) return;
         Connector_WS_processCancel.call(this);
     };
+
+    Scene_Battle.prototype.CacheTargetImageExtension = function(target) {
+        // Extension hook for caching target image
+        return null;
+    }
 
     //=============================================================================
     // Window Extensions

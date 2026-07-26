@@ -327,6 +327,100 @@
     };
 
     //--------------------------------------------------------------------------
+    // Main preview connector helper
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.previewConnectorRows = function(actor, actionData) {
+        if (!actor || !actionData) return [];
+        var item = this.actionObject(actionData);
+        if (!item) return [];
+        var state = BattleManager.connectorValidationState(actor);
+        return this.buildPreviewConnectorRows(state, item);
+    };
+
+    //--------------------------------------------------------------------------
+    // Connector validation helper
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.connectorPreviewSource = function(actor) {
+        console.log("Connector preview source");
+        if (!actor) return null;
+        var last = actor.lastQueuedActionData();
+        console.log("Last action:", last);
+        // Continuing a connector chain: show the previously queued action.
+        if (last) {
+            return {
+                type: "action",
+                action: last
+            };
+        }
+        console.log("Preview target:", actor._connectorPreviewTarget);
+        console.log("Preview target sprite:", actor._connectorPreviewTargetSprite);
+        // First action: show the selected target.
+        if (actor._connectorPreviewTarget) {
+            return {
+                type: "target",
+                battler: actor._connectorPreviewTarget,
+                sprite: actor._connectorPreviewTargetSprite
+            };
+        }
+        return null;
+    };
+
+    //--------------------------------------------------------------------------
+    // Recover database object
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.actionObject = function(actionData) {
+        if (!actionData) return null;
+        //if (actionData.type === "item") return $dataItems[actionData.id];
+        return $dataSkills[actionData.skillId];
+    };
+
+    //--------------------------------------------------------------------------
+    // Build preview connector list
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.buildPreviewConnectorRows = function(state, item) {
+        var rows = [];
+        if (!state || !item) return rows;
+        var disciplines = [
+            "combat",
+            "sorcery",
+            "diplomacy",
+            "deception",
+            "manoeuvre",
+            "distance"
+        ];
+        disciplines.forEach(function(name) {
+            var row = BattleManager.ITB_UI.previewConnectorRow(
+                state,
+                item,
+                name
+            );
+            if (row) rows.push(row);
+        });
+        return rows;
+    };
+
+    //--------------------------------------------------------------------------
+    // Create single preview connector row
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.previewConnectorRow = function(state, item, discipline) {
+        var input = item.inputConnectors[discipline];
+        var output = item.outputConnectors[discipline];
+        var current = state[discipline];
+        if (current === undefined && !input && !output) return null;
+        return {
+            discipline: discipline,
+            current: current,
+            input: input || null,
+            output: output || null
+        };
+    };
+
+    //--------------------------------------------------------------------------
     // Queued action ID helper
     //--------------------------------------------------------------------------
 
@@ -487,13 +581,14 @@
 
     Window_ActorCommand.prototype.confirmSelection = function() {
         console.log("Confirm Selection");
-        this.clearSelectionHighlights();
+        //this.clearSelectionHighlights();
         var selected = this.currentSelectionSprite();
         if (!selected || !selected._queueMarker) return;
-        selected.opacity = 255;
-        selected.setBlendColor([255, 255, 100, 64]);
-        selected._queueMarker.visible = true;
-        this.updatePreviewWindow(selected);
+        //selected.opacity = 255;
+        //selected.setBlendColor([255, 255, 100, 64]);
+        selected._queueMarker.visible = !selected._queueMarker.visible;
+        this.refreshSelection();
+        //this.updatePreviewWindow(selected);
     };
 
     Window_ActorCommand.prototype.refreshSelection = function() {
@@ -505,6 +600,8 @@
             //if (this._selectionBorder) this._selectionBorder.visible = false;
             this.updatePreviewWindow(null);
             return;
+        } else {
+            this.refreshQueueMarkers(selected);
         }
         //var queuedId = BattleManager.ITB_UI.queuedActionId();
         //console.log("Preview ID:", queuedId);
@@ -522,6 +619,14 @@
         this.updatePreviewWindow(selected);
     };
 
+    Window_ActorCommand.prototype.refreshQueueMarkers = function(selected) {
+        this._actionSprites.forEach(function(sprite) {
+            var mark = sprite._queueMarker;
+            if (!mark) return;
+            sprite._queueMarker.visible = (sprite === selected) ? mark.visible : false;
+        });
+    };
+
     //--------------------------------------------------------------------------
     // Clear selection visuals
     //--------------------------------------------------------------------------
@@ -533,7 +638,7 @@
             sprite.scale.y = scale;
             sprite.opacity = 215;
             sprite.setBlendColor([0, 0, 0, 0]);
-            if (sprite._queueMarker) sprite._queueMarker.visible = false;
+            //if (sprite._queueMarker) sprite._queueMarker.visible = false;
         });
     };
 
@@ -1499,6 +1604,7 @@
         this._item = null;
         this._badges = {};
         this.createBadges();
+        this.createConnectorHeader();
         this.hide();
         this.deactivate();
     };
@@ -1528,6 +1634,22 @@
     };
 
     //--------------------------------------------------------------------------
+    // Update
+    //--------------------------------------------------------------------------
+
+    var ITB_Command_WP_update = Window_Preview.prototype.update;
+    Window_Preview.prototype.update = function() {
+        ITB_Command_WP_update.call(this);
+        if (this._needsHeaderRefresh &&
+            this._header &&
+            this._header.inputIcon.bitmap &&
+            this._header.inputIcon.bitmap.isReady()) {
+                this._needsHeaderRefresh = false;
+                this.refresh();
+        }
+    };
+
+    //--------------------------------------------------------------------------
     // Create badge sprites
     //--------------------------------------------------------------------------
 
@@ -1547,11 +1669,12 @@
     // Set Item
     //--------------------------------------------------------------------------
 
-    Window_Preview.prototype.setAction = function(actor, item) {
-        if (this._actor === actor && this._item === item) return;
+    Window_Preview.prototype.setAction = function(actor, item, actionData) {
+        console.log("Set action");
+        //if (this._actor === actor && this._item === item) return;
         this._actor = actor;
         this._item = item;
-        //this._data = actionData;
+        this._data = actionData;
         this.refresh();
     };
 
@@ -1560,7 +1683,7 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.clear = function() {
-        this.setAction(null, null);
+        this.setAction(null, null, null);
     };
 
     //--------------------------------------------------------------------------
@@ -1568,13 +1691,15 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.refresh = function() {
+        console.log("Refresh preview window");
         this.contents.clear();
         var x = this.textPadding();
         var y = 0;
         var w = this.contentsWidth() - this.textPadding() * 2;
-        var item = this._item;
-        if (!item) return;
-        this.drawTitle(item);
+        var action = this._data;
+        if (!action) return;
+        this.drawTitle(action);
+        this.drawConnectorHeader();
         //this.drawText(this._item.name, x, y, w);
         //y += this.lineHeight() + 6;
         //this.drawTextEx(this._item.description || "", x, y);
@@ -1650,13 +1775,33 @@
         this._badges.corruption.y = bottomY - 2;
     };
 
-    var ITB_Command_SB_loadSystemImages = Scene_Boot.prototype.loadSystemImages;
-    Scene_Boot.prototype.loadSystemImages = function() {
-        ITB_Command_SB_loadSystemImages.call(this);
-        Graphics.loadFont(
-            "Roboto Slab Black",
-            "fonts/RobotoSlab-Black.ttf"
-        );
+    Window_Preview.prototype.layoutConnectorHeader = function() {
+        var x = this.headerX();
+        var y = this.headerY();
+        this._header.inputIcon.x = x;
+        this._header.inputIcon.y = y;
+        this._header.arrow.x = x + this.headerSpacing() + 6;
+        this._header.arrow.y = y + 8;
+        this._header.previewIcon.x = this._header.arrow.x + this.headerArrowSpacing();
+        this._header.previewIcon.y = y;
+        this._header.check.x = this._header.inputIcon.x + Window_Base._iconWidth + 4;
+        this._header.check.y = this._header.inputIcon.y + Window_Base._iconHeight + 4;
+    };
+
+    Window_Preview.prototype.headerX = function() {
+        return 220;
+    };
+
+    Window_Preview.prototype.headerY = function() {
+        return 20;
+    };
+
+    Window_Preview.prototype.headerSpacing = function() {
+        return 40;
+    };
+
+    Window_Preview.prototype.headerArrowSpacing = function() {
+        return 30;
     };
 
     Window_Preview.prototype.badgeFontFace = function() {
@@ -1793,8 +1938,23 @@
         );
     };
 
+    /* Window_Preview.prototype.refreshHeader = function(actor, data) {
+        this._inputIcon.bitmap.clear();
+        var source = BattleManager.ITB_UI.connectorPreviewSource(actor);
+        if (!source) {
+            this._inputIcon.visible = false;
+            return;
+        }
+        this._inputIcon.visible = true;
+        if (source.type === "action") {
+            this.drawHeaderActionIcon(source.action);
+        } else {
+            this.drawHeaderBattlerIcon(source.battler);
+        }
+    }; */
+
     //--------------------------------------------------------------------------
-    // Creat badge helpers
+    // Create badge helpers
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.createBadge = function(filename, scale) {
@@ -1893,20 +2053,22 @@
     // Set preview text
     //--------------------------------------------------------------------------
 
-    Window_Preview.prototype.drawTitle = function(item) {
-        var discipline = BattleManager.ITB_UI.getDisciplineImage(item.discipline);
-        //var string = BattleManager.ITB_UI.getActionDiscipline(item);
+    Window_Preview.prototype.drawTitle = function(actionData) {
+        var discipline = BattleManager.ITB_UI.getDisciplineImage(actionData.discipline);
+        //var string = BattleManager.ITB_UI.getActionDiscipline(actionData);
         //console.log("Discipline", string);
         //console.log("Image", discipline);
         var iconSize = 28;
         var spacing = 8;
         this.contents.fontSize = 26;
-        var textWidth = this.textWidth(item.name);
+        var textWidth = this.textWidth(actionData.name);
         var totalWidth = iconSize + spacing + textWidth;
         var x = Math.floor((this.contentsWidth() - totalWidth) / 2);
         var y = 2;
-        this.drawSystemImage(discipline, x, y, iconSize);
-        this.drawText(item.name, x + iconSize + spacing, y, totalWidth, "left");
+        console.log("Action:", actionData);
+        console.log("Discipline icon:", actionData.discipline);
+        this.drawSystemImage(discipline, x, y + 2, iconSize);
+        this.drawText(actionData.name, x + iconSize + spacing, y, totalWidth, "left");
         this.resetFontSettings();
     };
 
@@ -1914,6 +2076,31 @@
         if (this._text === text) return;
         this._text = text;
         this.refresh();
+    };
+
+    //--------------------------------------------------------------------------
+    // Create header for action connector validation
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.createConnectorHeader = function() {
+        this._header = {};
+        this._header.inputIcon = new Sprite();
+        this._header.inputIcon.bitmap = new Bitmap(32, 32);
+        this.addChild(this._header.inputIcon);
+        this._header.previewIcon = new Sprite();
+        this._header.previewIcon.bitmap = new Bitmap(32, 32);
+        this.addChild(this._header.previewIcon);
+        this._header.arrow = new Sprite(ImageManager.loadSystem("cursor"));
+        this.addChild(this._header.arrow);
+        this._header.arrow.scale.x = 0.5;
+        this._header.arrow.scale.y = 0.5;
+        this._header.check = new Sprite(ImageManager.loadSystem("check-mark-32"));
+        this._header.check.anchor.x = 1;
+        this._header.check.anchor.y = 1;
+        this._header.check.scale.x = 1.2;
+        this._header.check.scale.y = 1.2;
+        this.addChild(this._header.check);
+        this.layoutConnectorHeader();
     };
 
     //--------------------------------------------------------------------------
@@ -1949,6 +2136,164 @@
         badge._bonus.bitmap.fontSize = 22 / badge.scale.y;
         badge._value.bitmap.outlineWidth = 8;
         badge._bonus.bitmap.drawText(String(text), x, y, w, h, "center");
+    };
+
+    //--------------------------------------------------------------------------
+    // Draw connectors helpers
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawConnectorHeader = function() {
+        var actor = this._actor;
+        var item = this._item;
+        var inputBitmap = this._header.inputIcon.bitmap;
+        var outputBitmap = this._header.previewIcon.bitmap;
+        //var arrowBitmap = this._header.arrow.bitmap;
+        inputBitmap.clear();
+        outputBitmap.clear();
+        //arrowBitmap.clear();
+        var sprite = SceneManager._scene._actorCommandWindow.currentSelectionSprite();
+        this._header.check.visible = sprite && sprite._queueMarker.visible;
+        console.log("Current selected sprite", sprite);
+        console.log("Action check mark", sprite._queueMarker.visible);
+        console.log("Preview check mark", this._header.check.visible);
+        if (!actor || !item) return;
+        var source = BattleManager.ITB_UI.connectorPreviewSource(actor);
+        this.drawHeaderSourceIcon(inputBitmap, source);
+        //this.drawHeaderActionIcon(inputBitmap, item.iconIndex);
+        //this.drawHeaderArrow(arrowBitmap);
+        this.drawHeaderActionIcon(outputBitmap, item.iconIndex);
+        //if (BattleManager.actor() === actor) {
+        //    this._header.check.visible = true;
+        //}
+        this.drawConnectorAxis();
+    };
+
+    Window_Preview.prototype.drawHeaderSourceIcon = function(bitmap, source) {
+        bitmap.clear();
+        console.log("Draw header source icon");
+        if (!source) return;
+        console.log("Source:", source);
+        if (source.type === "action") {
+            var action = BattleManager.ITB_UI.actionObject(source.action);
+            console.log("Action:", action);
+            console.log("Index:", action.iconIndex);
+            if (action) this.drawHeaderActionIcon(bitmap, action.iconIndex);
+            return;
+        }
+        if (source.type === "target") {
+            this.drawHeaderBattlerIcon(bitmap, source);
+        }
+    };
+
+    Window_Preview.prototype.drawHeaderActionIcon = function(bitmap, iconIndex) {
+        bitmap.clear();
+        var pw = Window_Base._iconWidth;
+        var ph = Window_Base._iconHeight;
+        var sx = iconIndex % 16 * pw;
+        var sy = Math.floor(iconIndex / 16) * ph;
+        var icons = ImageManager.loadSystem("IconSet");
+        bitmap.blt(icons, sx, sy, pw, ph, 0, 0);
+    };
+
+    Window_Preview.prototype.drawHeaderBattlerIcon = function(bitmap, source) {
+        var battler = source.battler;
+        if (!battler) return;
+        if (battler.isActor()) {
+            this.drawHeaderActorFace(bitmap, battler);
+        } else {
+            this.drawHeaderEnemy(bitmap, source.sprite);
+        }
+    };
+
+    /* Window_Preview.prototype.drawHeaderArrow = function(bitmap) {
+        bitmap.clear(); 
+        bitmap.paintOpacity = 255;
+        bitmap.drawText("→", 0, 0, bitmap.width, bitmap.height, "center");
+    }; */
+
+    //--------------------------------------------------------------------------
+    // Draw actor icon
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawHeaderActor = function(bitmap, actor) {
+        var faceBitmap = ImageManager.loadFace(actor.faceName());
+        var pw = Window_Base._faceWidth;
+        var ph = Window_Base._faceHeight;
+        var index = actor.faceIndex();
+        var sx = (index % 4) * pw;
+        var sy = Math.floor(index / 4) * ph;
+        bitmap.blt(faceBitmap, sx, sy, pw, ph, 0, 0, bitmap.width, bitmap.height);
+    };
+
+    //--------------------------------------------------------------------------
+    // Draw enemy icon
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawHeaderEnemy = function(destBitmap, sprite) {
+        console.log("Draw Enemy Header");
+        this.drawHeaderActionIcon(destBitmap, 16);
+        sourceBitmap = sprite.bitmap;
+        if (!sourceBitmap.isReady()) {
+            this._needsHeaderRefresh = true;
+            return;
+        }
+        if (sprite._isSvEnemy) {
+            var sw = sourceBitmap.width / 9;
+            var sh = sourceBitmap.height / 6;
+        } else {
+            var sw = sourceBitmap.width;
+            var sh = sourceBitmap.height;
+        }
+        var dw = destBitmap.width;
+        var dh = destBitmap.height;
+        var dx = 0;
+        var dy = 0;
+        if (sw >= sh) {
+            var rate = sh / sw;
+            dh *= rate;
+            dy += (destBitmap.height - dh);
+        } else {
+            var rate = sw / sh;
+            dw *= rate;
+            dx += Math.floor((destBitmap.width - dw) / 2);
+        }
+        console.log("Draw icon", destBitmap);
+        console.log(
+            "Enemy bitmap:",
+            destBitmap.width,
+            destBitmap.height
+        );
+        console.log(
+            "Source rect:",
+            0,
+            0,
+            sw,
+            sh
+        );
+        console.log(
+            "Destination rect:",
+            dx,
+            dy,
+            dw,
+            dh
+        );
+        destBitmap.blt(sourceBitmap, 0, 0, sw, sh, dx, dy, dw, dh);
+    };
+
+    //--------------------------------------------------------------------------
+    // Draw connector indicator
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawConnectorAxis = function() {
+        var x = this.headerX() - 4;
+        //var startY = this.headerY() + Window_Base._iconHeight + 8;
+        //var endY = this.height - this.fittingHeight(1);
+        var startY = this.lineHeight();
+        var endY = startY + this.fittingHeight(1.5);
+        var color = "rgba(220,220,220,0.75)";
+        for (var y = startY; y < endY; y += 8) {
+            this.contents.fillRect(x, y, 2, 4, color);
+        }
     };
 
     //==========================================================================
@@ -2041,6 +2386,7 @@
 
     Window_Base.prototype.drawSystemImage = function(filename, x, y, size) {
         var bitmap = ImageManager.loadSystem(filename);
+        console.log("Image", bitmap);
         if (!bitmap.isReady()) {
             bitmap.addLoadListener(function() {
                 this.drawSystemImage(filename, x, y, size);
@@ -2171,13 +2517,14 @@
 
     Scene_Battle.prototype.updatePreviewWindow = function(actor, actionData) {
         if (!this._previewWindow) return;
+        console.log("Update preview window");
         if (!actionData) {
             this._previewWindow.clear();
             this._previewWindow.hide();
             return;
         }
         var item = BattleManager.ITB_UI.databaseAction(actionData);
-        this._previewWindow.setAction(actor, item);
+        this._previewWindow.setAction(actor, item, actionData);
         this._previewWindow.show();
     };
 
@@ -2190,6 +2537,28 @@
         ITB_Command_SB_queueConnectorAction.call(this, actor, action);
         if (this._actorCommandWindow) this._actorCommandWindow.confirmSelection();
     };
+
+    //--------------------------------------------------------------------------
+    // Cache target image
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.CacheTargetImageExtension = function(target) {
+        console.log("Cache target image");
+        console.log("Target:", target);
+        if (!target) return null;
+        var isSvEnemy = $gameSystem.isSideView() && 
+            Imported.YEP_X_AnimatedSVEnemies &&
+            target.hasSVBattler() &&
+            Yanfly.Param.CTBEnemySVBattler;
+        if (isSvEnemy) {
+            var image = ImageManager.loadSvEnemy(target.battlerName());
+        } else {
+            var image = ImageManager.loadEnemy(target.battlerName(), target.battlerHue());
+        }
+        var sprite = new Sprite(image);
+        sprite._isSvEnemy = isSvEnemy;
+        return sprite;
+    }
 
     //Scene_Battle.prototype.refreshUI = function(actor, action) {
     //    if (this._actorCommandWindow) this._actorCommandWindow.refreshSelection();
