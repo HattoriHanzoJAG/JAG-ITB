@@ -160,13 +160,6 @@
         return images[discipline] || null;
     };
 
-    Window_Base.prototype.createSystemSprite = function(filename) {
-        var sprite = new Sprite(ImageManager.loadSystem(filename));
-        //sprite.scale.x = 0.5 / sprite.bitmap.width;
-        //sprite.scale.y = 0.5 / sprite.bitmap.height;
-        return sprite;
-    };
-
     //--------------------------------------------------------------------------
     // Reconstruct action object
     //--------------------------------------------------------------------------
@@ -331,10 +324,15 @@
     //--------------------------------------------------------------------------
 
     BattleManager.ITB_UI.previewConnectorRows = function(actor, actionData) {
+        console.log("Preview connector rows");
+        console.log("Actor", actor);
+        console.log("Action", actionData);
         if (!actor || !actionData) return [];
         var item = this.actionObject(actionData);
+        console.log("Item", item);
         if (!item) return [];
         var state = BattleManager.connectorValidationState(actor);
+        console.log("Connector state", state);
         return this.buildPreviewConnectorRows(state, item);
     };
 
@@ -373,8 +371,15 @@
 
     BattleManager.ITB_UI.actionObject = function(actionData) {
         if (!actionData) return null;
-        //if (actionData.type === "item") return $dataItems[actionData.id];
-        return $dataSkills[actionData.skillId];
+        // UI action data
+        if (actionData.type) {
+            if (actionData.type === "skill") return $dataSkills[actionData.id];
+            if (actionData.type === "item") return $dataItems[actionData.id];
+            return null;
+        }
+        // Queued action data (currently skills only)
+        if (actionData.skillId) return $dataSkills[actionData.skillId];
+        return null;
     };
 
     //--------------------------------------------------------------------------
@@ -382,22 +387,17 @@
     //--------------------------------------------------------------------------
 
     BattleManager.ITB_UI.buildPreviewConnectorRows = function(state, item) {
+        console.log("Build perview connector rows");
         var rows = [];
         if (!state || !item) return rows;
-        var disciplines = [
-            "combat",
-            "sorcery",
-            "diplomacy",
-            "deception",
-            "manoeuvre",
-            "distance"
-        ];
-        disciplines.forEach(function(name) {
+        console.log("Disciplines", Game_Battler.prototype.connectorNames());
+        Game_Battler.prototype.connectorNames().forEach(function(name) {
             var row = BattleManager.ITB_UI.previewConnectorRow(
                 state,
                 item,
                 name
             );
+            console.log("Row", row);
             if (row) rows.push(row);
         });
         return rows;
@@ -1605,6 +1605,7 @@
         this._badges = {};
         this.createBadges();
         this.createConnectorHeader();
+        this.createConnectorRows();
         this.hide();
         this.deactivate();
     };
@@ -1700,6 +1701,7 @@
         if (!action) return;
         this.drawTitle(action);
         this.drawConnectorHeader();
+        this.drawConnectorRows();
         //this.drawText(this._item.name, x, y, w);
         //y += this.lineHeight() + 6;
         //this.drawTextEx(this._item.description || "", x, y);
@@ -1775,6 +1777,10 @@
         this._badges.corruption.y = bottomY - 2;
     };
 
+    Window_Preview.prototype.badgeFontFace = function() {
+        return "Rockwell";
+    };
+
     Window_Preview.prototype.layoutConnectorHeader = function() {
         var x = this.headerX();
         var y = this.headerY();
@@ -1804,8 +1810,21 @@
         return 30;
     };
 
-    Window_Preview.prototype.badgeFontFace = function() {
-        return "Rockwell";
+    Window_Preview.prototype.layoutConnectorRows = function() {
+        var startY = this.headerY() + this.connectorRowSpacing() + 2;
+        var visibleIndex = 0;
+        this._connectorRows.forEach(function(row) {
+            if (!row.icon.visible) return;
+            row.icon.x = 42;
+            row.icon.y = startY + visibleIndex * this.connectorRowSpacing();
+            row.strict.x = 16;
+            row.strict.y = row.icon.y + 2;
+            visibleIndex++;
+        }, this);
+    };
+
+    Window_Preview.prototype.connectorRowSpacing = function() {
+        return 36;
     };
 
     //--------------------------------------------------------------------------
@@ -1947,7 +1966,7 @@
         }
         this._inputIcon.visible = true;
         if (source.type === "action") {
-            this.drawHeaderActionIcon(source.action);
+            this.drawActionIcon(source.action);
         } else {
             this.drawHeaderBattlerIcon(source.battler);
         }
@@ -2104,6 +2123,36 @@
     };
 
     //--------------------------------------------------------------------------
+    // Create connector discipline sprites
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.createConnectorRows = function() {
+        console.log("Create connector rows");
+        this._connectorRows = [];
+        if (this._actor) {
+            var disciplines = this._actor.connectorNames();
+        } else {
+            var disciplines = Game_Battler.prototype.connectorNames();
+        }
+        console.log("Disciplines", disciplines);
+        for (var i = 0; i < disciplines.length; i++) {
+            var row = {};
+            row.discipline = disciplines[i];
+            // Strict marker
+            row.strict = new Sprite(ImageManager.loadSystem("strict-indicator-24"));
+            row.strict.visible = false;
+            this.addChild(row.strict);
+            // Discipline icon
+            row.icon = new Sprite(
+                ImageManager.loadSystem(BattleManager.ITB_UI.getDisciplineImage(disciplines[i]))
+            );
+            row.icon.visible = false;
+            this.addChild(row.icon);
+            this._connectorRows.push(row);
+        }
+    };
+
+    //--------------------------------------------------------------------------
     // Draw separator
     //--------------------------------------------------------------------------
 
@@ -2159,9 +2208,9 @@
         if (!actor || !item) return;
         var source = BattleManager.ITB_UI.connectorPreviewSource(actor);
         this.drawHeaderSourceIcon(inputBitmap, source);
-        //this.drawHeaderActionIcon(inputBitmap, item.iconIndex);
+        //this.drawActionIcon(inputBitmap, item.iconIndex);
         //this.drawHeaderArrow(arrowBitmap);
-        this.drawHeaderActionIcon(outputBitmap, item.iconIndex);
+        this.drawActionIcon(outputBitmap, item.iconIndex);
         //if (BattleManager.actor() === actor) {
         //    this._header.check.visible = true;
         //}
@@ -2177,7 +2226,7 @@
             var action = BattleManager.ITB_UI.actionObject(source.action);
             console.log("Action:", action);
             console.log("Index:", action.iconIndex);
-            if (action) this.drawHeaderActionIcon(bitmap, action.iconIndex);
+            if (action) this.drawActionIcon(bitmap, action.iconIndex);
             return;
         }
         if (source.type === "target") {
@@ -2185,7 +2234,32 @@
         }
     };
 
-    Window_Preview.prototype.drawHeaderActionIcon = function(bitmap, iconIndex) {
+    Window_Preview.prototype.drawConnectorRows = function() {
+        console.log("Draw connector rows");
+        var rows = BattleManager.ITB_UI.previewConnectorRows(
+            this._actor,
+            this._data
+        );
+        for (var i = 0; i < this._connectorRows.length; i++) {
+            var sprite = this._connectorRows[i];
+            sprite.strict.visible = false;
+            sprite.icon.visible = false;
+        }
+        console.log("Rows:", rows);
+        for (var i = 0; i < rows.length; i++) {
+            var data = rows[i];
+            var sprite = this._connectorRows.find(function(r) {
+                return r.discipline === data.discipline;
+            });
+            console.log("Sprite", sprite);
+            if (!sprite) continue;
+            sprite.icon.visible = true;
+            sprite.strict.visible = !!data.strict;
+        }
+        this.layoutConnectorRows();
+    };
+
+    Window_Preview.prototype.drawActionIcon = function(bitmap, iconIndex) {
         bitmap.clear();
         var pw = Window_Base._iconWidth;
         var ph = Window_Base._iconHeight;
@@ -2231,7 +2305,7 @@
 
     Window_Preview.prototype.drawHeaderEnemy = function(destBitmap, sprite) {
         console.log("Draw Enemy Header");
-        this.drawHeaderActionIcon(destBitmap, 16);
+        this.drawActionIcon(destBitmap, 16);
         sourceBitmap = sprite.bitmap;
         if (!sourceBitmap.isReady()) {
             this._needsHeaderRefresh = true;
@@ -2313,6 +2387,17 @@
         var sy = Math.floor(iconIndex / 16) * ph;
         this.contents.blt(bitmap, sx, sy, pw, ph, x, y, size, size);
         //this.contents.resize(0.5 * pw, 0.5 * ph);
+    };
+
+    //--------------------------------------------------------------------------
+    // Draw system icon helper
+    //--------------------------------------------------------------------------
+
+    Window_Base.prototype.createSystemSprite = function(filename) {
+        var sprite = new Sprite(ImageManager.loadSystem(filename));
+        //sprite.scale.x = 0.5 / sprite.bitmap.width;
+        //sprite.scale.y = 0.5 / sprite.bitmap.height;
+        return sprite;
     };
 
     //--------------------------------------------------------------------------
