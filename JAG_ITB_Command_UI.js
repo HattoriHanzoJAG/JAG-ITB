@@ -1607,6 +1607,7 @@
         this.createBadges();
         this.createConnectorHeader();
         this.createConnectorRows();
+        this.createConnectorAxis();
         this.hide();
         this.deactivate();
     };
@@ -1697,14 +1698,15 @@
         this._previewRows = BattleManager.ITB_UI.previewConnectorRows(this._actor, this._data);
         this.refreshWindowSize();
         this.contents.clear();
-        var x = this.textPadding();
-        var y = 0;
-        var w = this.contentsWidth() - this.textPadding() * 2;
+        //var x = this.textPadding();
+        //var y = 0;
+        //var w = this.contentsWidth() - this.textPadding() * 2;
         var action = this._data;
         if (!action) return;
         this.drawTitle(action);
         this.drawConnectorRows();
         this.drawConnectorHeader();
+        this.layoutConnectorAxis();
         this.drawConnectorAxis();
         //this.drawText(this._item.name, x, y, w);
         //y += this.lineHeight() + 6;
@@ -1795,7 +1797,9 @@
     };
 
     Window_Preview.prototype.layoutConnectorHeaderX = function() {
-        var x = this.connectorAxisX() + 4;
+        var x = this.connectorAxisX() + 4; //- Window_Base._iconWidth / 2;
+        console.log("Header X", x);
+        console.log("Header Layout X", this._header.x);
         this._header.inputIcon.x = x;
         this._header.arrow.x = x + this.headerSpacing() + 6;
         this._header.previewIcon.x = this._header.arrow.x + this.headerArrowSpacing();
@@ -1807,6 +1811,15 @@
             return this.connectorTrackLeft();
         }
         return this._connectorLayout.axisX;
+    };
+
+    Window_Preview.prototype.connectorAxisHeight = function() {
+        return this.fittingHeight(1.5);
+    };
+
+    Window_Preview.prototype.layoutConnectorAxis = function() {
+        this._axisSprite.x = this.connectorAxisX();
+        this._axisSprite.y = this.lineHeight();
     };
 
     Window_Preview.prototype.headerY = function() {
@@ -1822,7 +1835,8 @@
     };
 
     Window_Preview.prototype.layoutConnectorRows = function() {
-        var startY = this.headerY() + this.connectorRowSpacing() - this.connectorTrackHeight() / 2 + 2;
+        console.log("Layout Connector Rows");
+        var startY = this.headerY() + this.connectorRowSpacing() + 2;
         var visibleIndex = 0;
         this._connectorRows.forEach(function(row) {
             if (!row.icon.visible) return;
@@ -1830,11 +1844,13 @@
             row.icon.y = startY + visibleIndex * this.connectorRowSpacing();
             row.strict.x = this.connectorStrictX();
             row.strict.y = row.icon.y + 4;
-            var data = this._previewRows.find(function(r) {
-                return r.discipline === row.discipline;
-            });
-            row.track.x = this._connectorLayout.axisX - data.inputOffset;
-            row.track.y = row.icon.y + 12;
+            //var data = this._previewRows.find(function(r) {
+            //    return r.discipline === row.discipline;
+            //});
+            console.log("Input Offset:", this._connectorLayout.inputOffset);
+            console.log("Connector Axis X:", this._connectorLayout.axisX);
+            row.track.x = this.connectorAxisX() - this._connectorLayout.inputOffset;
+            row.track.y = row.icon.y - this.connectorTrackHeight() / 2 + 12;
             visibleIndex++;
         }, this);
     };
@@ -1875,27 +1891,41 @@
     //    return this.connectorAxisX() - this.connectorValueToX(0);
     //};
 
-    Window_Preview.prototype.connectorValueToX = function(value, row) {
-        var range = this.connectorDisplayRange(row);
-        var pixels = this.connectorTrackWidth();
-        return Math.round((value - range.min) / (range.max - range.min) * pixels);
-    };
+    /* Window_Preview.prototype.connectorValueToX = function(value, row) {
+        return row.track.x + this.connectorValueToPixels(value, row.displayRange);
+        //var range = this.connectorDisplayRange(row);
+        //var pixels = this.connectorTrackWidth();
+        //return Math.round((value - range.min) / (range.max - range.min) * pixels);
+    }; */
 
     Window_Preview.prototype.buildConnectorLayout = function(rows) {
         console.log("Build connector layout");
+        var globalLeftDelta = Infinity;
+        var globalRightDelta = -Infinity;
+        rows.forEach(function(row) {
+            row.displayRange = this.connectorDisplayRange(row);
+            if (!row.displayRange) return;
+            globalLeftDelta = Math.min(
+                globalLeftDelta,
+                row.displayRange.min - row.current
+            );
+            globalRightDelta = Math.max(
+                globalRightDelta,
+                row.displayRange.max - row.current
+            );
+        }, this);
         var layout = {
             maxInputOffset: 0,
             axisX: 0
         };
-        rows.forEach(function(row) {
-            if (!row.input) return;
-            row.inputOffset = this.connectorInputOffset(row);
-            console.log("Offset", row.inputOffset);
-            if (row.inputOffset > layout.maxInputOffset) {
-                layout.maxInputOffset = row.inputOffset;
-            }
-        }, this);
-        layout.axisX = this.connectorTrackLeft() + layout.maxInputOffset;
+        layout.globalSpan = {
+            min: globalLeftDelta,
+            max: globalRightDelta
+        };
+        layout.inputOffset = this.connectorValueToPixels(0, layout.globalSpan);
+        console.log("Connector track left", this.connectorTrackLeft());
+        console.log("Maximum input offset", layout.inputOffset);
+        layout.axisX = this.connectorTrackLeft() + layout.inputOffset;
         return layout;
     };
 
@@ -1904,23 +1934,23 @@
         switch (row.input.type) {
             case "exact":
                 return {
-                    left: row.input.value,
-                    right: row.input.value
+                    left: row.input.value - row.current,
+                    right: row.input.value - row.current
                 };
             case "min":
                 return {
-                    left: row.input.value,
-                    right: this.connectorDisplayRange(row).max
+                    left: row.input.value - row.current,
+                    right: row.displayRange.max - row.current
                 };
             case "max":
                 return {
-                    left: this.connectorDisplayRange(row).min,
-                    right: row.input.value
+                    left: row.displayRange.min - row.current,
+                    right: row.input.value - row.current
                 };
             case "range":
                 return {
-                    left: row.input.min,
-                    right: row.input.max
+                    left: row.input.min - row.current,
+                    right: row.input.max - row.current
                 };
             }
         return null;
@@ -2255,6 +2285,17 @@
     };
 
     //--------------------------------------------------------------------------
+    // Create connector axis highlighting connector input values
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.createConnectorAxis = function() {
+        this._axisSprite = new Sprite(
+            new Bitmap(2, this.connectorAxisHeight())
+        );
+        this.addChild(this._axisSprite);
+    };
+
+    //--------------------------------------------------------------------------
     // Create connector discipline sprites
     //--------------------------------------------------------------------------
 
@@ -2292,11 +2333,13 @@
     // Connector input range helpers
     //--------------------------------------------------------------------------
 
-    Window_Preview.prototype.connectorInputOffset = function(row) {
-        var range = this.connectorDisplayRange(row);
-        var value = this.connectorInputValue(row);
-        return value - range.min;
-    };
+    /* Window_Preview.prototype.connectorInputOffset = function(row) {
+        return row.inputOffset;
+        //var range = row.displayRange;
+        //var interval = this.connectorInterval(row);
+        //if (!interval) return 0;
+        //return this.connectorValueToPixels(interval.right, range);
+    }; */
 
     Window_Preview.prototype.connectorDisplayRange = function(row) {
         console.log("Connector display range");
@@ -2332,8 +2375,22 @@
         return {min: min - 1, max: max + 1};
     };
 
+    Window_Preview.prototype.connectorValueToPixels = function(value, range) {
+        console.log("Connector Value to Pixels");
+        if (!range) return 0;
+        var span = range.max - range.min;
+        if (span <= 0) return 0;
+        console.log("Input value:", value);
+        console.log("Connector range:", range.min, range.max);
+        return Math.round((value - range.min) * this.connectorTrackWidth() / span);
+    };
+
     Window_Preview.prototype.connectorInputValue = function(row) {
+        console.log("Connector input value");
+        console.log("Input:", row.input);
         if (!row.input) return row.current;
+        console.log("Type:", row.input.type);
+        console.log("Value:", row.input.value);
         switch (row.input.type) {
             case "exact":
                 return row.input.value;
@@ -2437,6 +2494,7 @@
             var sprite = this._connectorRows[i];
             sprite.strict.visible = false;
             sprite.icon.visible = false;
+            sprite.track.visible = false;
         }
         console.log("Rows:", rows);
         for (var i = 0; i < rows.length; i++) {
@@ -2446,16 +2504,13 @@
             });
             console.log("Sprite", sprite);
             if (!sprite) continue;
+            sprite.preview = data;
             sprite.icon.visible = true;
             sprite.strict.visible = !!data.strict;
+            sprite.track.visible = !! data.input;
         }
         this.layoutConnectorRows();
-        rows.forEach(function(data) {
-            var row = this._connectorRows.find(function(r) {
-                return r.discipline === data.discipline;
-            });
-            if (!row) return;
-            row.track.visible = !!data.input;
+        this._connectorRows.forEach(function(row) {
             console.log(
                 "Row track",
                 row.track.x,
@@ -2464,31 +2519,43 @@
                 row.track.bitmap.width,
                 row.track.bitmap.height
             );
-            console.log(row.track.parent);
+            if (!row.track.visible) return;
             console.log("Axis", this._connectorLayout.axisX);
-            console.log("Offset", row.inputOffset);
+            //console.log("Input offset", row.inputOffset);
+            this.drawConnectorTrack(row.track.bitmap, row.preview);
+        }, this);
+        /* rows.forEach(function(data) {
+            var row = this._connectorRows.find(function(r) {
+                return r.discipline === data.discipline;
+            });
+            if (!row) return;
+            row.track.visible = !!data.input;
             if (!data.input) return;
             this.drawConnectorTrack(row.track.bitmap, data);
-            console.log(row.track.bitmap._dirty);
-        }, this);
+        }, this); */
     };
 
     Window_Preview.prototype.drawConnectorTrack = function(bitmap, row) {
         //bitmap.clear();
         console.log("Draw connector track");
         console.log("Bitmap", bitmap);
-        console.log("Width", w);
-        console.log("Height", h);
-        console.log("Y-position", y);
         //bitmap.fillRect(0, y, w, 2, "rgba(80,80,80,1)");
-        var color1 = this.textColor(29);   // gauge left
-        var color2 = this.textColor(30);   // gauge right
+        var color1 = this.textColor(30);   // gauge left
+        var color2 = this.textColor(9);   // gauge right
+        var span = this._connectorLayout.globalSpan;
         var interval = this.connectorInterval(row);
+        console.log("Interval:", interval);
+        console.log("Span:", span);
         if (!interval) return;
-        var x = this.connectorValueToX(interval.left, row);
-        var w = this.connectorValueToX(interval.right, row) - x + 1;
+        var x = this.connectorValueToPixels(interval.left, span);
+        var w = this.connectorValueToPixels(interval.right, span) - x + 1;
         var h = bitmap.height;
         var y = Math.floor(h / 2) - 1;
+        console.log("Width", w);
+        console.log("Height", h);
+        console.log("X-position", x);
+        console.log("Y-position", y);
+        console.log("Bitmap X", bitmap.x);
         bitmap.gradientFillRect(x, y, w, h, color1, color2);
         // thin border
         bitmap.fillRect(x, y, w, 1, this.gaugeBackColor());             // top
@@ -2599,12 +2666,19 @@
     Window_Preview.prototype.drawConnectorAxis = function() {
         //var startY = this.headerY() + Window_Base._iconHeight + 8;
         //var endY = this.height - this.fittingHeight(1);
-        var startY = this.lineHeight();
+        var bitmap = this._axisSprite.bitmap;
+        bitmap.clear();
+        var color = "rgba(90,90,90,1.0)";
+        for (var y = 0; y < bitmap.height; y += 8) {
+            bitmap.fillRect(0, y, 2, 4, color);
+        }
+        /* var startY = this.lineHeight();
         var endY = startY + this.fittingHeight(1.5);
         var color = "rgba(220,220,220,0.75)";
         for (var y = startY; y < endY; y += 8) {
             this.contents.fillRect(this.connectorAxisX(), y, 2, 4, color);
-        }
+            //this.contents.fillRect(this.connectorAxisX() - 1, 0, 4, this.contentsHeight(), "red");
+        }*/
     };
 
     //==========================================================================
