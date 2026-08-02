@@ -416,7 +416,8 @@
             discipline: discipline,
             current: current,
             input: input || null,
-            output: output || null
+            output: output || null,
+            strict: state._connectorRules && state._connectorRules[discipline] === "strict"
         };
     };
 
@@ -1693,6 +1694,8 @@
 
     Window_Preview.prototype.refresh = function() {
         console.log("Refresh preview window");
+        this._previewRows = BattleManager.ITB_UI.previewConnectorRows(this._actor, this._data);
+        this.refreshWindowSize();
         this.contents.clear();
         var x = this.textPadding();
         var y = 0;
@@ -1700,8 +1703,9 @@
         var action = this._data;
         if (!action) return;
         this.drawTitle(action);
-        this.drawConnectorHeader();
         this.drawConnectorRows();
+        this.drawConnectorHeader();
+        this.drawConnectorAxis();
         //this.drawText(this._item.name, x, y, w);
         //y += this.lineHeight() + 6;
         //this.drawTextEx(this._item.description || "", x, y);
@@ -1782,20 +1786,27 @@
     };
 
     Window_Preview.prototype.layoutConnectorHeader = function() {
-        var x = this.headerX();
+        this.layoutConnectorHeaderX();
         var y = this.headerY();
-        this._header.inputIcon.x = x;
         this._header.inputIcon.y = y;
-        this._header.arrow.x = x + this.headerSpacing() + 6;
         this._header.arrow.y = y + 8;
-        this._header.previewIcon.x = this._header.arrow.x + this.headerArrowSpacing();
         this._header.previewIcon.y = y;
-        this._header.check.x = this._header.inputIcon.x + Window_Base._iconWidth + 4;
-        this._header.check.y = this._header.inputIcon.y + Window_Base._iconHeight + 4;
+        this._header.check.y = y + Window_Base._iconHeight + 4;
     };
 
-    Window_Preview.prototype.headerX = function() {
-        return 220;
+    Window_Preview.prototype.layoutConnectorHeaderX = function() {
+        var x = this.connectorAxisX() + 4;
+        this._header.inputIcon.x = x;
+        this._header.arrow.x = x + this.headerSpacing() + 6;
+        this._header.previewIcon.x = this._header.arrow.x + this.headerArrowSpacing();
+        this._header.check.x = this._header.inputIcon.x + Window_Base._iconWidth + 4;
+    };
+
+    Window_Preview.prototype.connectorAxisX = function() {
+        if (!this._connectorLayout) {
+            return this.connectorTrackLeft();
+        }
+        return this._connectorLayout.axisX;
     };
 
     Window_Preview.prototype.headerY = function() {
@@ -1811,20 +1822,123 @@
     };
 
     Window_Preview.prototype.layoutConnectorRows = function() {
-        var startY = this.headerY() + this.connectorRowSpacing() + 2;
+        var startY = this.headerY() + this.connectorRowSpacing() - this.connectorTrackHeight() / 2 + 2;
         var visibleIndex = 0;
         this._connectorRows.forEach(function(row) {
             if (!row.icon.visible) return;
-            row.icon.x = 42;
+            row.icon.x = this.connectorIconX();
             row.icon.y = startY + visibleIndex * this.connectorRowSpacing();
-            row.strict.x = 16;
-            row.strict.y = row.icon.y + 2;
+            row.strict.x = this.connectorStrictX();
+            row.strict.y = row.icon.y + 4;
+            var data = this._previewRows.find(function(r) {
+                return r.discipline === row.discipline;
+            });
+            row.track.x = this._connectorLayout.axisX - data.inputOffset;
+            row.track.y = row.icon.y + 12;
             visibleIndex++;
         }, this);
     };
 
+    Window_Preview.prototype.connectorStrictX = function() {
+        return 14;
+    };
+
+    Window_Preview.prototype.connectorIconX = function() {
+        return this.connectorStrictX() + 28;
+    };
+
     Window_Preview.prototype.connectorRowSpacing = function() {
         return 36;
+    };
+
+    Window_Preview.prototype.connectorTrackHeight = function() {
+        return 16;
+    };
+
+    Window_Preview.prototype.connectorTrackWidth = function() {
+        return this.connectorTrackRight() - this.connectorTrackLeft();
+    };
+
+    Window_Preview.prototype.connectorTrackRight = function() {
+        return this.separatorX() - 16;
+    };
+
+    Window_Preview.prototype.connectorTrackLeft = function() {
+        return this.connectorIconX() + Window_Base._iconWidth + this.connectorTrackMargin();
+    };
+
+    Window_Preview.prototype.connectorTrackMargin = function() {
+        return 10;
+    };
+
+    //Window_Preview.prototype.connectorTrackLeft = function() {
+    //    return this.connectorAxisX() - this.connectorValueToX(0);
+    //};
+
+    Window_Preview.prototype.connectorValueToX = function(value, row) {
+        var range = this.connectorDisplayRange(row);
+        var pixels = this.connectorTrackWidth();
+        return Math.round((value - range.min) / (range.max - range.min) * pixels);
+    };
+
+    Window_Preview.prototype.buildConnectorLayout = function(rows) {
+        console.log("Build connector layout");
+        var layout = {
+            maxInputOffset: 0,
+            axisX: 0
+        };
+        rows.forEach(function(row) {
+            if (!row.input) return;
+            row.inputOffset = this.connectorInputOffset(row);
+            console.log("Offset", row.inputOffset);
+            if (row.inputOffset > layout.maxInputOffset) {
+                layout.maxInputOffset = row.inputOffset;
+            }
+        }, this);
+        layout.axisX = this.connectorTrackLeft() + layout.maxInputOffset;
+        return layout;
+    };
+
+    Window_Preview.prototype.connectorInterval = function(row) {
+        if (!row.input) return null;
+        switch (row.input.type) {
+            case "exact":
+                return {
+                    left: row.input.value,
+                    right: row.input.value
+                };
+            case "min":
+                return {
+                    left: row.input.value,
+                    right: this.connectorDisplayRange(row).max
+                };
+            case "max":
+                return {
+                    left: this.connectorDisplayRange(row).min,
+                    right: row.input.value
+                };
+            case "range":
+                return {
+                    left: row.input.min,
+                    right: row.input.max
+                };
+            }
+        return null;
+    };
+
+    //--------------------------------------------------------------------------
+    // Window resize helper
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.refreshWindowSize = function() {
+        var newHeight = this.fittingHeight(this.requiredLines());
+        if (this.height === newHeight) return;
+        this.height = newHeight;
+        this.createContents();
+        var scene = SceneManager._scene;
+        if (scene && scene._statusWindow) {
+            this.y = scene._statusWindow.y - this.height - 10;
+        }
     };
 
     //--------------------------------------------------------------------------
@@ -2069,6 +2183,24 @@
     //};
 
     //--------------------------------------------------------------------------
+    // Compute the required number of lines
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.requiredLines = function() {
+        var lines = 1.7;               // title/header/badges
+        if (this._item) {
+            lines += this._previewRows.length;
+        }
+        lines += this.descriptionLines();
+        return lines;
+    };
+
+    Window_Preview.prototype.descriptionLines = function() {
+        // Placeholder until descriptions are implemented.
+        return 0;
+    };
+
+    //--------------------------------------------------------------------------
     // Set preview text
     //--------------------------------------------------------------------------
 
@@ -2139,7 +2271,7 @@
             var row = {};
             row.discipline = disciplines[i];
             // Strict marker
-            row.strict = new Sprite(ImageManager.loadSystem("strict-indicator-24"));
+            row.strict = new Sprite(ImageManager.loadSystem("strict-indicator2-24"));
             row.strict.visible = false;
             this.addChild(row.strict);
             // Discipline icon
@@ -2148,8 +2280,71 @@
             );
             row.icon.visible = false;
             this.addChild(row.icon);
+            row.track = new Sprite();
+            row.track.bitmap = new Bitmap(this.connectorTrackWidth(), this.connectorTrackHeight());
+            row.track.visible = false;
+            this.addChild(row.track);
             this._connectorRows.push(row);
         }
+    };
+
+    //--------------------------------------------------------------------------
+    // Connector input range helpers
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.connectorInputOffset = function(row) {
+        var range = this.connectorDisplayRange(row);
+        var value = this.connectorInputValue(row);
+        return value - range.min;
+    };
+
+    Window_Preview.prototype.connectorDisplayRange = function(row) {
+        console.log("Connector display range");
+        var min = row.current;
+        var max = row.current;
+        if (row.output && row.output.mode === "set") {
+            min = Math.min(min, row.output.value);
+            max = Math.max(max, row.output.value);
+        }
+        if (row.input) {
+            switch (row.input.type) {
+                case "exact":
+                    min = Math.min(min, row.input.value);
+                    max = Math.max(max, row.input.value);
+                    break;
+                case "min":
+                    min = Math.min(min, row.input.value);
+                    break;
+                case "max":
+                    max = Math.max(max, row.input.value);
+                    break;
+                case "range":
+                    min = Math.min(min, row.input.min);
+                    max = Math.max(max, row.input.max);
+                    break;
+            }
+        }
+        console.log("Min:", min);
+        console.log("Max:", max);
+        console.log("Output value:", row.output.value);
+        console.log("Current value:", row.current);
+        // Always leave one connector value of padding.
+        return {min: min - 1, max: max + 1};
+    };
+
+    Window_Preview.prototype.connectorInputValue = function(row) {
+        if (!row.input) return row.current;
+        switch (row.input.type) {
+            case "exact":
+                return row.input.value;
+            case "min":
+                return row.input.value;
+            case "max":
+                return row.input.value;
+            case "range":
+                return row.input.min;
+        }
+        return row.current;
     };
 
     //--------------------------------------------------------------------------
@@ -2200,6 +2395,7 @@
         inputBitmap.clear();
         outputBitmap.clear();
         //arrowBitmap.clear();
+        this.layoutConnectorHeaderX();
         var sprite = SceneManager._scene._actorCommandWindow.currentSelectionSprite();
         this._header.check.visible = sprite && sprite._queueMarker.visible;
         console.log("Current selected sprite", sprite);
@@ -2214,7 +2410,6 @@
         //if (BattleManager.actor() === actor) {
         //    this._header.check.visible = true;
         //}
-        this.drawConnectorAxis();
     };
 
     Window_Preview.prototype.drawHeaderSourceIcon = function(bitmap, source) {
@@ -2236,10 +2431,8 @@
 
     Window_Preview.prototype.drawConnectorRows = function() {
         console.log("Draw connector rows");
-        var rows = BattleManager.ITB_UI.previewConnectorRows(
-            this._actor,
-            this._data
-        );
+        var rows = this._previewRows;
+        this._connectorLayout = this.buildConnectorLayout(rows);
         for (var i = 0; i < this._connectorRows.length; i++) {
             var sprite = this._connectorRows[i];
             sprite.strict.visible = false;
@@ -2257,6 +2450,51 @@
             sprite.strict.visible = !!data.strict;
         }
         this.layoutConnectorRows();
+        rows.forEach(function(data) {
+            var row = this._connectorRows.find(function(r) {
+                return r.discipline === data.discipline;
+            });
+            if (!row) return;
+            row.track.visible = !!data.input;
+            console.log(
+                "Row track",
+                row.track.x,
+                row.track.y,
+                row.track.visible,
+                row.track.bitmap.width,
+                row.track.bitmap.height
+            );
+            console.log(row.track.parent);
+            console.log("Axis", this._connectorLayout.axisX);
+            console.log("Offset", row.inputOffset);
+            if (!data.input) return;
+            this.drawConnectorTrack(row.track.bitmap, data);
+            console.log(row.track.bitmap._dirty);
+        }, this);
+    };
+
+    Window_Preview.prototype.drawConnectorTrack = function(bitmap, row) {
+        //bitmap.clear();
+        console.log("Draw connector track");
+        console.log("Bitmap", bitmap);
+        console.log("Width", w);
+        console.log("Height", h);
+        console.log("Y-position", y);
+        //bitmap.fillRect(0, y, w, 2, "rgba(80,80,80,1)");
+        var color1 = this.textColor(29);   // gauge left
+        var color2 = this.textColor(30);   // gauge right
+        var interval = this.connectorInterval(row);
+        if (!interval) return;
+        var x = this.connectorValueToX(interval.left, row);
+        var w = this.connectorValueToX(interval.right, row) - x + 1;
+        var h = bitmap.height;
+        var y = Math.floor(h / 2) - 1;
+        bitmap.gradientFillRect(x, y, w, h, color1, color2);
+        // thin border
+        bitmap.fillRect(x, y, w, 1, this.gaugeBackColor());             // top
+        bitmap.fillRect(x, y + h - 1, w, 1, this.gaugeBackColor());// bottom
+        bitmap.fillRect(x, y, 1, h, this.gaugeBackColor());            // left
+        bitmap.fillRect(x + w - 1, y, 1, h, this.gaugeBackColor());// right
     };
 
     Window_Preview.prototype.drawActionIcon = function(bitmap, iconIndex) {
@@ -2359,14 +2597,13 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.drawConnectorAxis = function() {
-        var x = this.headerX() - 4;
         //var startY = this.headerY() + Window_Base._iconHeight + 8;
         //var endY = this.height - this.fittingHeight(1);
         var startY = this.lineHeight();
         var endY = startY + this.fittingHeight(1.5);
         var color = "rgba(220,220,220,0.75)";
         for (var y = startY; y < endY; y += 8) {
-            this.contents.fillRect(x, y, 2, 4, color);
+            this.contents.fillRect(this.connectorAxisX(), y, 2, 4, color);
         }
     };
 
