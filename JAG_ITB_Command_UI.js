@@ -1607,7 +1607,6 @@
         this.createBadges();
         this.createConnectorHeader();
         this.createConnectorRows();
-        this.createConnectorAxis();
         this.hide();
         this.deactivate();
     };
@@ -1745,7 +1744,11 @@
     };
 
     Window_Preview.prototype.separatorX = function() {
-        return Math.floor(this.contentsWidth() * 0.55);
+        return Math.floor(this.contentsWidth() * 0.5);
+    };
+
+    Window_Preview.prototype.separatorHeight = function() {
+        return this.fittingHeight(this.requiredLines() - 2.5);
     };
 
     Window_Preview.prototype.layoutBadges = function() {
@@ -1797,7 +1800,7 @@
     };
 
     Window_Preview.prototype.layoutConnectorHeaderX = function() {
-        var x = this.connectorAxisX() + 4; //- Window_Base._iconWidth / 2;
+        var x = this.connectorAxisX() - Window_Base._iconWidth / 2 + 1;
         console.log("Header X", x);
         console.log("Header Layout X", this._header.x);
         this._header.inputIcon.x = x;
@@ -1813,17 +1816,14 @@
         return this._connectorLayout.axisX;
     };
 
-    Window_Preview.prototype.connectorAxisHeight = function() {
-        return this.fittingHeight(1.5);
-    };
-
     Window_Preview.prototype.layoutConnectorAxis = function() {
+        this.createConnectorAxis();
         this._axisSprite.x = this.connectorAxisX();
-        this._axisSprite.y = this.lineHeight();
+        this._axisSprite.y = this.headerY() + Window_Base._iconHeight + 4;
     };
 
     Window_Preview.prototype.headerY = function() {
-        return 20;
+        return 22;
     };
 
     Window_Preview.prototype.headerSpacing = function() {
@@ -2289,9 +2289,7 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.createConnectorAxis = function() {
-        this._axisSprite = new Sprite(
-            new Bitmap(2, this.connectorAxisHeight())
-        );
+        this._axisSprite = new Sprite();
         this.addChild(this._axisSprite);
     };
 
@@ -2411,7 +2409,7 @@
     Window_Preview.prototype.drawSeparator = function() {
         var x = this.separatorX();
         var y = this.lineHeight();
-        var h = this.fittingHeight(1.5);//this.lineHeight() + this.fittingHeight(1);
+        var h = this.separatorHeight(); //this.lineHeight() + this.fittingHeight(1);
         this.contents.fillRect(x, y, 2, h, this.normalColor());
     };
 
@@ -2666,11 +2664,17 @@
     Window_Preview.prototype.drawConnectorAxis = function() {
         //var startY = this.headerY() + Window_Base._iconHeight + 8;
         //var endY = this.height - this.fittingHeight(1);
+        console.log("Draw connector axis");
+        var height = this.separatorHeight();
+        if (!this._axisSprite.bitmap || this._axisSprite.bitmap.height !== height) {
+            this._axisSprite.bitmap = new Bitmap(2, height);
+        }
         var bitmap = this._axisSprite.bitmap;
+        console.log("Height", bitmap.height);
         bitmap.clear();
-        var color = "rgba(90,90,90,1.0)";
+        var color = "rgba(237,180,130,0.9)";
         for (var y = 0; y < bitmap.height; y += 8) {
-            bitmap.fillRect(0, y, 2, 4, color);
+            bitmap.fillRect(0, y, 4, 4, color);
         }
         /* var startY = this.lineHeight();
         var endY = startY + this.fittingHeight(1.5);
