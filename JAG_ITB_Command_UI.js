@@ -247,12 +247,12 @@
     //--------------------------------------------------------------------------
 
     BattleManager.ITB_UI.actionInitiativeCost = function(item) {
-        console.log("Item", item);
+        //console.log("Item", item);
         if (!item) return 0;
-        console.log("Meta", item.meta);
+        //console.log("Meta", item.meta);
         // Skill
         if (item.meta && item.meta.Initiative) {
-            console.log("Initiative", item.meta.Initiative);
+            //console.log("Initiative", item.meta.Initiative);
             return Number(item.meta.Initiative) || 0;
         }
         // Fallback
@@ -325,14 +325,14 @@
 
     BattleManager.ITB_UI.previewConnectorRows = function(actor, actionData) {
         console.log("Preview connector rows");
-        console.log("Actor", actor);
-        console.log("Action", actionData);
+        //console.log("Actor", actor);
+        //console.log("Action", actionData);
         if (!actor || !actionData) return [];
         var item = this.actionObject(actionData);
-        console.log("Item", item);
+        //console.log("Item", item);
         if (!item) return [];
         var state = BattleManager.connectorValidationState(actor);
-        console.log("Connector state", state);
+        //console.log("Connector state", state);
         return this.buildPreviewConnectorRows(state, item);
     };
 
@@ -344,7 +344,7 @@
         console.log("Connector preview source");
         if (!actor) return null;
         var last = actor.lastQueuedActionData();
-        console.log("Last action:", last);
+        //console.log("Last action:", last);
         // Continuing a connector chain: show the previously queued action.
         if (last) {
             return {
@@ -352,8 +352,8 @@
                 action: last
             };
         }
-        console.log("Preview target:", actor._connectorPreviewTarget);
-        console.log("Preview target sprite:", actor._connectorPreviewTargetSprite);
+        //console.log("Preview target:", actor._connectorPreviewTarget);
+        //console.log("Preview target sprite:", actor._connectorPreviewTargetSprite);
         // First action: show the selected target.
         if (actor._connectorPreviewTarget) {
             return {
@@ -390,14 +390,14 @@
         console.log("Build perview connector rows");
         var rows = [];
         if (!state || !item) return rows;
-        console.log("Disciplines", Game_Battler.prototype.connectorNames());
+        //console.log("Disciplines", Game_Battler.prototype.connectorNames());
         Game_Battler.prototype.connectorNames().forEach(function(name) {
             var row = BattleManager.ITB_UI.previewConnectorRow(
                 state,
                 item,
                 name
             );
-            console.log("Row", row);
+            //console.log("Row", row);
             if (row) rows.push(row);
         });
         return rows;
@@ -560,11 +560,11 @@
         this.drawMainCommands(commands);
         console.log("Draw rows");
         this.drawDisciplineRows(rows);
-        console.log(
-            this._selection,
-            this._scrollRow,
-            this.currentSelectionSprite()
-        );
+        //console.log(
+        //    this._selection,
+        //    this._scrollRow,
+        //    this.currentSelectionSprite()
+        //);
         //if (TouchInput.isTriggered()) 
         //this.updateMouseSelection();
         this.refreshSelection();
@@ -855,7 +855,7 @@
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.clearITBActionSprites = function() {
-        console.log("Clear Actions:", this.children.length);
+        //console.log("Clear Actions:", this.children.length);
         //if (this._selectionBorder) this._selectionBorder.visible = false;
         if (!this._actionSprites) {
             this._actionSprites = [];
@@ -938,7 +938,7 @@
             console.log("CLICK: no sprite")
             return;
         }
-        console.log("CLICK: sprite region", sprite._uiData.region);
+        //console.log("CLICK: sprite region", sprite._uiData.region);
         // Commands: single-click selection
         if (sprite._uiData.region === "commands") {
             this.updateMouseSelection(sprite);
@@ -1242,7 +1242,7 @@
 
     Window_ActorCommand.prototype.showActionsCommand = function(mode) {
         if (BattleManager.ITB_UI._actionMode === mode) return;
-        console.log("Show actions", mode);
+        //console.log("Show actions", mode);
         this.setActionMode(mode);
         this.clearITBActionSprites();
         this.requestITBRefresh();
@@ -1754,11 +1754,11 @@
     Window_Preview.prototype.layoutBadges = function() {
         var topY = -12;
         var bottomY = this.height - 36;
-        console.log(
-            "Aether badge:",
-            this._badges.aether.x,
-            this._badges.aether.y
-        );
+        //console.log(
+        //    "Aether badge:",
+        //    this._badges.aether.x,
+        //    this._badges.aether.y
+        //);
         this._badges.aether.x = -2;
         this._badges.aether.y = topY - 2;
         this._badges.initiative.x = this.width / 2 - 24;
@@ -1800,9 +1800,13 @@
     };
 
     Window_Preview.prototype.layoutConnectorHeaderX = function() {
-        var x = this.connectorAxisX() - Window_Base._iconWidth / 2 + 1;
-        console.log("Header X", x);
-        console.log("Header Layout X", this._header.x);
+        if (this._connectorLayout && this._connectorLayout.visibleTracks) {
+            var x = this.connectorAxisX() - Window_Base._iconWidth / 2 + 1;
+        } else {
+            var x = this.connectorTrackLeft();
+        }
+        //console.log("Header X", x);
+        //console.log("Header Layout X", this._header.x);
         this._header.inputIcon.x = x;
         this._header.arrow.x = x + this.headerSpacing() + 6;
         this._header.previewIcon.x = this._header.arrow.x + this.headerArrowSpacing();
@@ -1817,7 +1821,11 @@
     };
 
     Window_Preview.prototype.layoutConnectorAxis = function() {
-        this.createConnectorAxis();
+        if (!this._axisSprite) return;
+        var height = this.separatorHeight();
+        if (!this._axisSprite.bitmap || this._axisSprite.bitmap.height !== height) {
+            this._axisSprite.bitmap = new Bitmap(2, height);
+        }
         this._axisSprite.x = this.connectorAxisX();
         this._axisSprite.y = this.headerY() + Window_Base._iconHeight + 4;
     };
@@ -1847,10 +1855,12 @@
             //var data = this._previewRows.find(function(r) {
             //    return r.discipline === row.discipline;
             //});
-            console.log("Input Offset:", this._connectorLayout.inputOffset);
-            console.log("Connector Axis X:", this._connectorLayout.axisX);
+            //console.log("Input Offset:", this._connectorLayout.inputOffset);
+            //console.log("Connector Axis X:", this._connectorLayout.axisX);
             row.track.x = this.connectorAxisX() - this._connectorLayout.inputOffset;
             row.track.y = row.icon.y - this.connectorTrackHeight() / 2 + 12;
+            row.trackValues.x = row.track.x - 4;
+            row.trackValues.y = row.track.y - 3 * this.connectorTrackHeight() / 4;
             visibleIndex++;
         }, this);
     };
@@ -1868,7 +1878,7 @@
     };
 
     Window_Preview.prototype.connectorTrackHeight = function() {
-        return 16;
+        return 20;
     };
 
     Window_Preview.prototype.connectorTrackWidth = function() {
@@ -1904,7 +1914,7 @@
         var globalRightDelta = -Infinity;
         rows.forEach(function(row) {
             row.displayRange = this.connectorDisplayRange(row);
-            if (!row.displayRange) return;
+            if (!row.input || !row.displayRange) return;
             globalLeftDelta = Math.min(
                 globalLeftDelta,
                 row.displayRange.min - row.current
@@ -1915,13 +1925,15 @@
             );
         }, this);
         var layout = {
-            maxInputOffset: 0,
+            visibleTracks: false,
+            inputOffset: 0,
             axisX: 0
         };
         layout.globalSpan = {
             min: globalLeftDelta,
             max: globalRightDelta
         };
+        console.log("Global span", layout.globalSpan);
         layout.inputOffset = this.connectorValueToPixels(0, layout.globalSpan);
         console.log("Connector track left", this.connectorTrackLeft());
         console.log("Maximum input offset", layout.inputOffset);
@@ -1930,7 +1942,9 @@
     };
 
     Window_Preview.prototype.connectorInterval = function(row) {
+        console.log("Input", row.input);
         if (!row.input) return null;
+        console.log("Type", row.input.type);
         switch (row.input.type) {
             case "exact":
                 return {
@@ -2006,14 +2020,14 @@
         var badge = this._badges.damage;
         if (!badge) return;
         var info = BattleManager.ITB_UI.actionAttackInfo(this._actor, this._item);
-        console.log("Visible", !!info);
+        //console.log("Visible", !!info);
         badge.visible = !!info;
         if (!info) return;
         var total = info.total;
-        console.log("Total", total);
+        //console.log("Total", total);
         this.drawBadgeValue(badge, total, 0, 3, badge._value.bitmap.width, 24);
         var bonus = "+" + info.bonus;
-        console.log("Bonus", bonus);
+        //console.log("Bonus", bonus);
         this.drawBadgeBonus(badge, bonus, -2, 4, badge._bonus.bitmap.width, 16);
     };
 
@@ -2027,14 +2041,14 @@
             badge.x = this.width - 49;
         }
         var info = BattleManager.ITB_UI.actionInfluenceInfo(this._actor, this._item);
-        console.log("Visible", !!info);
+        //console.log("Visible", !!info);
         badge.visible = !!info;
         if (!info) return;
         var total = info.total;
-        console.log("Total", total);
+        //console.log("Total", total);
         this.drawBadgeValue(badge, total, 0, 3, badge._value.bitmap.width, 24);
         var bonus = "+" + info.bonus;
-        console.log("Bonus", bonus);
+        //console.log("Bonus", bonus);
         this.drawBadgeBonus(badge, bonus, -2, 4, badge._bonus.bitmap.width, 16);
     };
 
@@ -2043,7 +2057,7 @@
         var badge = this._badges.defense;
         if (!badge) return;
         var guard = this._item && this._item.meta && this._item.meta.Guard;
-        console.log("Visible", !!guard);
+        //console.log("Visible", !!guard);
         badge.visible = !!guard;
         if (!guard) return;
         var total = this._actor.def;
@@ -2062,7 +2076,7 @@
             badge.x = -6;
         }
         var composure = this._item && this._item.meta && this._item.meta.Composure;
-        console.log("Visible", !!composure);
+        //console.log("Visible", !!composure);
         badge.visible = !!composure;
         if (!composure) return;
         var total = this._actor.mdf;
@@ -2246,8 +2260,8 @@
         var totalWidth = iconSize + spacing + textWidth;
         var x = Math.floor((this.contentsWidth() - totalWidth) / 2);
         var y = 2;
-        console.log("Action:", actionData);
-        console.log("Discipline icon:", actionData.discipline);
+        //console.log("Action:", actionData);
+        //console.log("Discipline icon:", actionData.discipline);
         this.drawSystemImage(discipline, x, y + 2, iconSize);
         this.drawText(actionData.name, x + iconSize + spacing, y, totalWidth, "left");
         this.resetFontSettings();
@@ -2305,7 +2319,8 @@
         } else {
             var disciplines = Game_Battler.prototype.connectorNames();
         }
-        console.log("Disciplines", disciplines);
+        //console.log("Disciplines", disciplines);
+        // Create row elements up to and including the tracks.
         for (var i = 0; i < disciplines.length; i++) {
             var row = {};
             row.discipline = disciplines[i];
@@ -2319,12 +2334,25 @@
             );
             row.icon.visible = false;
             this.addChild(row.icon);
+            // Connector track
             row.track = new Sprite();
             row.track.bitmap = new Bitmap(this.connectorTrackWidth(), this.connectorTrackHeight());
             row.track.visible = false;
             this.addChild(row.track);
             this._connectorRows.push(row);
         }
+        // Axis must be above all tracks.
+        this.createConnectorAxis();
+        // Track values must be above the axis.
+        this._connectorRows.forEach(function(row) {
+            row.trackValues = new Sprite();
+            row.trackValues.bitmap = new Bitmap(
+                this.connectorTrackWidth(),
+                this.connectorRowSpacing() + 8
+            );
+            row.trackValues.visible = false;
+            this.addChild(row.trackValues);
+        }, this);
     };
 
     //--------------------------------------------------------------------------
@@ -2355,8 +2383,10 @@
                     break;
                 case "min":
                     min = Math.min(min, row.input.value);
+                    max = Math.max(max, row.input.value);
                     break;
                 case "max":
+                    min = Math.min(min, row.input.value);
                     max = Math.max(max, row.input.value);
                     break;
                 case "range":
@@ -2365,6 +2395,7 @@
                     break;
             }
         }
+        console.log("Row", row);
         console.log("Min:", min);
         console.log("Max:", max);
         console.log("Output value:", row.output.value);
@@ -2374,21 +2405,21 @@
     };
 
     Window_Preview.prototype.connectorValueToPixels = function(value, range) {
-        console.log("Connector Value to Pixels");
+        //console.log("Connector Value to Pixels");
         if (!range) return 0;
         var span = range.max - range.min;
         if (span <= 0) return 0;
-        console.log("Input value:", value);
-        console.log("Connector range:", range.min, range.max);
+        //console.log("Input value:", value);
+        //console.log("Connector range:", range.min, range.max);
         return Math.round((value - range.min) * this.connectorTrackWidth() / span);
     };
 
     Window_Preview.prototype.connectorInputValue = function(row) {
-        console.log("Connector input value");
-        console.log("Input:", row.input);
+        //console.log("Connector input value");
+        //console.log("Input:", row.input);
         if (!row.input) return row.current;
-        console.log("Type:", row.input.type);
-        console.log("Value:", row.input.value);
+        //console.log("Type:", row.input.type);
+        //console.log("Value:", row.input.value);
         switch (row.input.type) {
             case "exact":
                 return row.input.value;
@@ -2453,9 +2484,9 @@
         this.layoutConnectorHeaderX();
         var sprite = SceneManager._scene._actorCommandWindow.currentSelectionSprite();
         this._header.check.visible = sprite && sprite._queueMarker.visible;
-        console.log("Current selected sprite", sprite);
-        console.log("Action check mark", sprite._queueMarker.visible);
-        console.log("Preview check mark", this._header.check.visible);
+        //console.log("Current selected sprite", sprite);
+        //console.log("Action check mark", sprite._queueMarker.visible);
+        //console.log("Preview check mark", this._header.check.visible);
         if (!actor || !item) return;
         var source = BattleManager.ITB_UI.connectorPreviewSource(actor);
         this.drawHeaderSourceIcon(inputBitmap, source);
@@ -2471,11 +2502,11 @@
         bitmap.clear();
         console.log("Draw header source icon");
         if (!source) return;
-        console.log("Source:", source);
+        //console.log("Source:", source);
         if (source.type === "action") {
             var action = BattleManager.ITB_UI.actionObject(source.action);
-            console.log("Action:", action);
-            console.log("Index:", action.iconIndex);
+            //console.log("Action:", action);
+            //console.log("Index:", action.iconIndex);
             if (action) this.drawActionIcon(bitmap, action.iconIndex);
             return;
         }
@@ -2488,11 +2519,17 @@
         console.log("Draw connector rows");
         var rows = this._previewRows;
         this._connectorLayout = this.buildConnectorLayout(rows);
+        var visibleTracks = false;
+        // Reset all connector row sprites.
         for (var i = 0; i < this._connectorRows.length; i++) {
             var sprite = this._connectorRows[i];
             sprite.strict.visible = false;
             sprite.icon.visible = false;
             sprite.track.visible = false;
+            sprite.trackValues.visible = false;
+            // Clear previous track and value drawings.
+            sprite.track.bitmap.clear();
+            sprite.trackValues.bitmap.clear();
         }
         console.log("Rows:", rows);
         for (var i = 0; i < rows.length; i++) {
@@ -2505,10 +2542,17 @@
             sprite.preview = data;
             sprite.icon.visible = true;
             sprite.strict.visible = !!data.strict;
-            sprite.track.visible = !! data.input;
+            if (!!data.input && data.input.type) {
+                sprite.track.visible = true;
+                sprite.trackValues.visible = true;
+                visibleTracks = true;
+            }
         }
+        console.log("Tracks visible", visibleTracks);
+        this._connectorLayout.visibleTracks = visibleTracks;
         this.layoutConnectorRows();
         this._connectorRows.forEach(function(row) {
+            console.log("Discipline", row.discipline);
             console.log(
                 "Row track",
                 row.track.x,
@@ -2518,9 +2562,9 @@
                 row.track.bitmap.height
             );
             if (!row.track.visible) return;
-            console.log("Axis", this._connectorLayout.axisX);
-            //console.log("Input offset", row.inputOffset);
-            this.drawConnectorTrack(row.track.bitmap, row.preview);
+            //console.log("Axis", this._connectorLayout.axisX);
+            console.log("Input offset", row.inputOffset);
+            this.drawConnectorTrack(row);
         }, this);
         /* rows.forEach(function(data) {
             var row = this._connectorRows.find(function(r) {
@@ -2533,33 +2577,35 @@
         }, this); */
     };
 
-    Window_Preview.prototype.drawConnectorTrack = function(bitmap, row) {
-        //bitmap.clear();
+    Window_Preview.prototype.drawConnectorTrack = function(row) {
+        if (!row || !row.track) return;
+        track = row.track.bitmap;
+        track.clear();
         console.log("Draw connector track");
-        console.log("Bitmap", bitmap);
+        console.log("Bitmap", track);
         //bitmap.fillRect(0, y, w, 2, "rgba(80,80,80,1)");
         var color1 = this.textColor(30);   // gauge left
         var color2 = this.textColor(9);   // gauge right
         var span = this._connectorLayout.globalSpan;
-        var interval = this.connectorInterval(row);
+        var interval = this.connectorInterval(row.preview);
         console.log("Interval:", interval);
         console.log("Span:", span);
-        if (!interval) return;
+        if (!span || !interval) return;
         var x = this.connectorValueToPixels(interval.left, span);
         var w = this.connectorValueToPixels(interval.right, span) - x + 1;
-        var h = bitmap.height;
+        var h = track.height;
         var y = Math.floor(h / 2) - 1;
         console.log("Width", w);
         console.log("Height", h);
         console.log("X-position", x);
         console.log("Y-position", y);
-        console.log("Bitmap X", bitmap.x);
-        bitmap.gradientFillRect(x, y, w, h, color1, color2);
+        track.gradientFillRect(x, y, w, h, color1, color2);
         // thin border
-        bitmap.fillRect(x, y, w, 1, this.gaugeBackColor());             // top
-        bitmap.fillRect(x, y + h - 1, w, 1, this.gaugeBackColor());// bottom
-        bitmap.fillRect(x, y, 1, h, this.gaugeBackColor());            // left
-        bitmap.fillRect(x + w - 1, y, 1, h, this.gaugeBackColor());// right
+        track.fillRect(x, y, w, 1, this.gaugeBackColor());             // top
+        track.fillRect(x, y + h - 1, w, 1, this.gaugeBackColor());// bottom
+        track.fillRect(x, y, 1, h, this.gaugeBackColor());            // left
+        track.fillRect(x + w - 1, y, 1, h, this.gaugeBackColor());// right
+        this.drawConnectorValues(row);
     };
 
     Window_Preview.prototype.drawActionIcon = function(bitmap, iconIndex) {
@@ -2587,6 +2633,94 @@
         bitmap.paintOpacity = 255;
         bitmap.drawText("→", 0, 0, bitmap.width, bitmap.height, "center");
     }; */
+
+    Window_Preview.prototype.drawConnectorValues = function(row) {
+        console.log("Draw connector values");
+        //console.log("Row", row);
+        //console.log("Preview", row.preview);
+        //console.log("Values", row.trackValues);
+        if (!row || !row.trackValues) return;
+        bitmap = row.trackValues.bitmap;
+        bitmap.clear();
+        //console.log("Bitmap", bitmap);
+        var span = this._connectorLayout.globalSpan;
+        var data = row.preview;
+        var interval = this.connectorInterval(data);
+        var boundaries = this.connectorBoundaries(data.input);
+        if (!span || !interval) return;
+        var axis = this.connectorValueToPixels(0, span);
+        var left = this.connectorValueToPixels(interval.left, span);
+        var right = this.connectorValueToPixels(interval.right, span) - left + 1;
+        console.log("Boundaries", boundaries);
+        //console.log("Left", left);
+        //console.log("Right", right);
+        bitmap.fontSize = 20;
+        bitmap.outlineWidth = 6;
+        // Same visual idea as redrawInitiative():
+        var y = Math.floor(bitmap.height * 0.25);
+        bitmap.textColor = "rgba(237,180,130,1.0)";
+        bitmap.drawText(
+            data.current,
+            axis - 12,
+            y,
+            32,
+            bitmap.height,
+            "center"
+        );
+        bitmap.textColor = this.textColor(6);
+        bitmap.outlineWidth = 5;
+        if (boundaries !== null) {
+            if (boundaries.left !== undefined && boundaries.left !== data.current) {
+                bitmap.drawText(
+                    boundaries.left,
+                    left - 8,
+                    y,
+                    32,
+                    bitmap.height,
+                    "center"
+                );
+            }
+            if (boundaries.right !== undefined && 
+                boundaries.right !== boundaries.left &&
+                boundaries.right !== data.current) {
+                    bitmap.drawText(
+                        boundaries.right,
+                        right - 12,
+                        y,
+                        32,
+                        bitmap.height,
+                        "center"
+                    );
+            }
+        }
+    };
+
+    Window_Preview.prototype.connectorBoundaries = function(input) {
+        //console.log("Input", input);
+        if (!input) return null;
+        //console.log("Type", input.type);
+        switch (input.type) {
+            case "exact":
+                return {
+                    left: input.value,
+                    right: input.value
+                };
+            case "min":
+                return {
+                    left: input.value
+                };
+            case "max":
+                return {
+                    right: input.value
+                };
+            case "range":
+                return {
+                    left: input.min,
+                    right: input.max
+                };
+            }
+        return null;
+    };
 
     //--------------------------------------------------------------------------
     // Draw actor icon
@@ -2634,7 +2768,7 @@
             dw *= rate;
             dx += Math.floor((destBitmap.width - dw) / 2);
         }
-        console.log("Draw icon", destBitmap);
+        /* console.log("Draw icon", destBitmap);
         console.log(
             "Enemy bitmap:",
             destBitmap.width,
@@ -2653,7 +2787,7 @@
             dy,
             dw,
             dh
-        );
+        ); */
         destBitmap.blt(sourceBitmap, 0, 0, sw, sh, dx, dy, dw, dh);
     };
 
@@ -2664,13 +2798,10 @@
     Window_Preview.prototype.drawConnectorAxis = function() {
         //var startY = this.headerY() + Window_Base._iconHeight + 8;
         //var endY = this.height - this.fittingHeight(1);
+        if (!this._connectorLayout || !this._connectorLayout.visibleTracks) return;
         console.log("Draw connector axis");
-        var height = this.separatorHeight();
-        if (!this._axisSprite.bitmap || this._axisSprite.bitmap.height !== height) {
-            this._axisSprite.bitmap = new Bitmap(2, height);
-        }
         var bitmap = this._axisSprite.bitmap;
-        console.log("Height", bitmap.height);
+        //console.log("Height", bitmap.height);
         bitmap.clear();
         var color = "rgba(237,180,130,0.9)";
         for (var y = 0; y < bitmap.height; y += 8) {
@@ -2786,7 +2917,7 @@
 
     Window_Base.prototype.drawSystemImage = function(filename, x, y, size) {
         var bitmap = ImageManager.loadSystem(filename);
-        console.log("Image", bitmap);
+        //console.log("Image", bitmap);
         if (!bitmap.isReady()) {
             bitmap.addLoadListener(function() {
                 this.drawSystemImage(filename, x, y, size);
@@ -2943,8 +3074,8 @@
     //--------------------------------------------------------------------------
 
     Scene_Battle.prototype.CacheTargetImageExtension = function(target) {
-        console.log("Cache target image");
-        console.log("Target:", target);
+        //console.log("Cache target image");
+        //console.log("Target:", target);
         if (!target) return null;
         var isSvEnemy = $gameSystem.isSideView() && 
             Imported.YEP_X_AnimatedSVEnemies &&
@@ -2964,18 +3095,21 @@
     //    if (this._actorCommandWindow) this._actorCommandWindow.refreshSelection();
     //};
 
-    /* var ITB_Command_WB_initialize = Window_Base.prototype.initialize;
-    Window_Base.prototype.initialize = function() {
-        ITB_Command_WB_initialize.call(this);
-        this.backOpacity = 255;
-    }
+    //--------------------------------------------------------------------------
+    // Helper for drawing connector values
+    //--------------------------------------------------------------------------
 
-    Window_Base.prototype.standardBackOpacity = function() {
-        return 255;
-    };
-
-    Window_Preview.prototype.standardBackOpacity = function() {
-        return 255;
+    /* Bitmap.prototype.drawConnectorValues = function(leftX, rightX, leftValue, rightValue) {
+        this.fontSize = 14;
+        this.textColor = Window_Base.prototype.textColor.call(
+            SceneManager._scene._previewWindow,
+            0
+        );
+        var y = Math.floor(this.height * 0.35);
+        this.drawText(leftValue, leftX - 12, y, 24, this.height, "center");
+        if (leftValue !== rightValue) {
+            this.drawText(rightValue, rightX - 12, y, 24, this.height, "center");
+        }
     }; */
 
 })();
