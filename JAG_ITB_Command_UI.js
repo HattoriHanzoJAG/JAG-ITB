@@ -1845,22 +1845,31 @@
     Window_Preview.prototype.layoutConnectorRows = function() {
         console.log("Layout Connector Rows");
         var startY = this.headerY() + this.connectorRowSpacing() + 2;
+        console.log("Y", startY);
         var visibleIndex = 0;
         this._connectorRows.forEach(function(row) {
             if (!row.icon.visible) return;
+            // Discipline icon
             row.icon.x = this.connectorIconX();
+            console.log("Discipline", row.discipline);
+            console.log("Index", visibleIndex);
             row.icon.y = startY + visibleIndex * this.connectorRowSpacing();
+            console.log("Icon y", row.icon.y);
+            // Strict marker
             row.strict.x = this.connectorStrictX();
             row.strict.y = row.icon.y + 4;
-            //var data = this._previewRows.find(function(r) {
-            //    return r.discipline === row.discipline;
-            //});
             //console.log("Input Offset:", this._connectorLayout.inputOffset);
             //console.log("Connector Axis X:", this._connectorLayout.axisX);
+            // Track
             row.track.x = this.connectorAxisX() - this._connectorLayout.inputOffset;
             row.track.y = row.icon.y - this.connectorTrackHeight() / 2 + 12;
+            // Track values
             row.trackValues.x = row.track.x - 4;
             row.trackValues.y = row.track.y - 3 * this.connectorTrackHeight() / 4;
+            // Validation mark
+            row.mark.x = this.connectorMarkX(row.state) + 4;
+            console.log("Connector Mark X", row.mark.x);
+            row.mark.y = row.icon.y + 6;
             visibleIndex++;
         }, this);
     };
@@ -1909,12 +1918,17 @@
     }; */
 
     Window_Preview.prototype.buildConnectorLayout = function(rows) {
+        //if (!row.displayRange) return null;
         console.log("Build connector layout");
         var globalLeftDelta = Infinity;
         var globalRightDelta = -Infinity;
+        var visibleTracks = false;
         rows.forEach(function(row) {
+            row.state = this.connectorRowState(row);
+            if (!row.state) return;
             row.displayRange = this.connectorDisplayRange(row);
-            if (!row.input || !row.displayRange) return;
+            if (!row.displayRange) return;
+            visibleTracks = true;
             globalLeftDelta = Math.min(
                 globalLeftDelta,
                 row.displayRange.min - row.current
@@ -1925,14 +1939,17 @@
             );
         }, this);
         var layout = {
-            visibleTracks: false,
+            visibleTracks: visibleTracks,
             inputOffset: 0,
-            axisX: 0
+            axisX: this.connectorTrackLeft()
         };
+        // No tracks means no connector axis/layout.
+        if (!visibleTracks) return layout;
         layout.globalSpan = {
             min: globalLeftDelta,
             max: globalRightDelta
         };
+        if (globalLeftDelta === Infinity || globalRightDelta === -Infinity) return layout
         console.log("Global span", layout.globalSpan);
         layout.inputOffset = this.connectorValueToPixels(0, layout.globalSpan);
         console.log("Connector track left", this.connectorTrackLeft());
@@ -1968,6 +1985,21 @@
                 };
             }
         return null;
+    };
+
+    Window_Preview.prototype.connectorMarkX = function(state) {
+        console.log("Connector Mark Position");
+        console.log("state", state);
+        console.log("Preview icon x", this._header.previewIcon.x);
+        console.log("Icon width", Window_Base._iconWidth);
+        var offset = 14; // half of the 20px mark, adjusted by 1px
+        if (state === "disconnected") {
+            return this.connectorAxisX() - offset;
+        } else if (state === "valid") {
+            return (this._header.previewIcon.x + Window_Base._iconWidth / 2 - offset - 1);
+        } else {
+            return (this._header.previewIcon.x + Window_Base._iconWidth / 2 - offset - 1);
+        }
     };
 
     //--------------------------------------------------------------------------
@@ -2314,12 +2346,10 @@
     Window_Preview.prototype.createConnectorRows = function() {
         console.log("Create connector rows");
         this._connectorRows = [];
-        if (this._actor) {
-            var disciplines = this._actor.connectorNames();
-        } else {
-            var disciplines = Game_Battler.prototype.connectorNames();
-        }
-        //console.log("Disciplines", disciplines);
+        var disciplines = this._actor 
+            ? this._actor.connectorNames() 
+            : Game_Battler.prototype.connectorNames();
+        // console.log("Disciplines", disciplines);
         // Create row elements up to and including the tracks.
         for (var i = 0; i < disciplines.length; i++) {
             var row = {};
@@ -2345,6 +2375,7 @@
         this.createConnectorAxis();
         // Track values must be above the axis.
         this._connectorRows.forEach(function(row) {
+            // Connector values
             row.trackValues = new Sprite();
             row.trackValues.bitmap = new Bitmap(
                 this.connectorTrackWidth(),
@@ -2352,7 +2383,26 @@
             );
             row.trackValues.visible = false;
             this.addChild(row.trackValues);
+            // Status marker
+            row.mark = new Sprite(ImageManager.loadSystem("cross-mark2-24"));
+            row.mark.visible = false;
+            this.addChild(row.mark);
+            //this._connectorRows.push(row);
         }, this);
+    };
+
+    Window_Preview.prototype.setConnectorRowMark = function(row) {
+        if (row.state === "valid") {
+            row.mark.bitmap = ImageManager.loadSystem("check-mark2-24");
+            row.mark.visible = true;
+            return;
+        }
+        if (row.state === "invalid" || row.state === "disconnected") {
+            row.mark.bitmap = ImageManager.loadSystem("cross-mark2-24");
+            row.mark.visible = true;
+            return;
+        }
+        row.mark.visible = false;
     };
 
     //--------------------------------------------------------------------------
@@ -2368,6 +2418,7 @@
     }; */
 
     Window_Preview.prototype.connectorDisplayRange = function(row) {
+        if (row.current === undefined) return null;
         console.log("Connector display range");
         var min = row.current;
         var max = row.current;
@@ -2395,10 +2446,10 @@
                     break;
             }
         }
-        console.log("Row", row);
+        console.log("Discipline", row.discipline);
         console.log("Min:", min);
         console.log("Max:", max);
-        console.log("Output value:", row.output.value);
+        console.log("Output value:", row.output ? row.output.value : undefined);
         console.log("Current value:", row.current);
         // Always leave one connector value of padding.
         return {min: min - 1, max: max + 1};
@@ -2432,6 +2483,42 @@
         }
         return row.current;
     };
+
+    Window_Preview.prototype.connectorRowState = function(row) {
+        var hasInput = (row.current !== undefined);
+        var hasConnector = !!row.input;
+        var hasCondition = hasConnector && !!row.input.type;
+        // No connector and no input value: nothing needs to be displayed.
+        if (!hasInput && !hasConnector) return null;
+        // Action has a connector, but without a condition.
+        if (hasConnector && !hasCondition) return "unconditional";
+        // Action has a condition, but the source has no value.
+        if (!hasInput && hasCondition) return "disconnected";
+        // Input value exists and action has a condition to evaluate.
+        if (hasInput && hasCondition) return "conditional";
+        // Input value exists, but action does not have a connector.
+        // Strict/lax indicator determines whether this is valid.
+        if (hasInput && !hasConnector) {
+            return row.strict ? "invalid" : "valid";
+        }
+        return null;
+    };
+
+    Window_Preview.prototype.connectorInputExists = function(row) {
+        return row.current !== undefined && row.current !== null;
+    };
+
+    /* Window_Preview.prototype.hasConnectorInput = function(row) {
+        return row.current !== undefined;
+    };
+
+    Window_Preview.prototype.hasConnectorCondition = function(row) {
+        return !!(row.input && row.input.type);
+    };
+
+    Window_Preview.prototype.hasConnectorTrack = function(row) {
+        return (this.hasConnectorInput(row) && this.hasConnectorCondition(row));
+    }; */
 
     //--------------------------------------------------------------------------
     // Draw separator
@@ -2481,7 +2568,7 @@
         inputBitmap.clear();
         outputBitmap.clear();
         //arrowBitmap.clear();
-        this.layoutConnectorHeaderX();
+        //this.layoutConnectorHeaderX();
         var sprite = SceneManager._scene._actorCommandWindow.currentSelectionSprite();
         this._header.check.visible = sprite && sprite._queueMarker.visible;
         //console.log("Current selected sprite", sprite);
@@ -2519,18 +2606,8 @@
         console.log("Draw connector rows");
         var rows = this._previewRows;
         this._connectorLayout = this.buildConnectorLayout(rows);
-        var visibleTracks = false;
-        // Reset all connector row sprites.
-        for (var i = 0; i < this._connectorRows.length; i++) {
-            var sprite = this._connectorRows[i];
-            sprite.strict.visible = false;
-            sprite.icon.visible = false;
-            sprite.track.visible = false;
-            sprite.trackValues.visible = false;
-            // Clear previous track and value drawings.
-            sprite.track.bitmap.clear();
-            sprite.trackValues.bitmap.clear();
-        }
+        //var visibleTracks = false;
+        this.clearRowSprites();
         console.log("Rows:", rows);
         for (var i = 0; i < rows.length; i++) {
             var data = rows[i];
@@ -2542,14 +2619,31 @@
             sprite.preview = data;
             sprite.icon.visible = true;
             sprite.strict.visible = !!data.strict;
-            if (!!data.input && data.input.type) {
-                sprite.track.visible = true;
+            sprite.state = data.state;
+            /* No input condition:
+            *    input exists + no condition
+            *       -> valid/invalid depends on strict/lax
+            *    no input value + no condition
+            *       -> unconditional and valid -> omit row
+            *  Input condition exists.
+            *  Existing input value -> draw normal track.
+            *  Missing input value  -> draw cross on axis.
+            */
+            visibleTrack = data.state === "conditional" || 
+                data.state === "unconditional";
+            sprite.track.visible = visibleTrack;
+            sprite.mark.visible = (
+                data.state === "valid" ||
+                data.state === "invalid" ||
+                data.state === "disconnected"
+            );
+            if (data.state !== "disconnected") {
                 sprite.trackValues.visible = true;
-                visibleTracks = true;
-            }
+            };
         }
-        console.log("Tracks visible", visibleTracks);
-        this._connectorLayout.visibleTracks = visibleTracks;
+        //console.log("Tracks visible", visibleTracks);
+        //this._connectorLayout.visibleTracks = visibleTracks;
+        this.layoutConnectorHeaderX();
         this.layoutConnectorRows();
         this._connectorRows.forEach(function(row) {
             console.log("Discipline", row.discipline);
@@ -2561,10 +2655,12 @@
                 row.track.bitmap.width,
                 row.track.bitmap.height
             );
-            if (!row.track.visible) return;
+            if (!row.preview) return;
+            //if (!row.track.visible) return;
             //console.log("Axis", this._connectorLayout.axisX);
             console.log("Input offset", row.inputOffset);
             this.drawConnectorTrack(row);
+            this.drawConnectorValues(row);
         }, this);
         /* rows.forEach(function(data) {
             var row = this._connectorRows.find(function(r) {
@@ -2578,7 +2674,8 @@
     };
 
     Window_Preview.prototype.drawConnectorTrack = function(row) {
-        if (!row || !row.track) return;
+        if (!row || !row.track || !row.track.visible) return;
+        //if (row.state !== "conditional" && row.state !== "unconditional") return;
         track = row.track.bitmap;
         track.clear();
         console.log("Draw connector track");
@@ -2586,13 +2683,17 @@
         //bitmap.fillRect(0, y, w, 2, "rgba(80,80,80,1)");
         var color1 = this.textColor(30);   // gauge left
         var color2 = this.textColor(9);   // gauge right
-        var span = this._connectorLayout.globalSpan;
-        var interval = this.connectorInterval(row.preview);
-        console.log("Interval:", interval);
-        console.log("Span:", span);
-        if (!span || !interval) return;
-        var x = this.connectorValueToPixels(interval.left, span);
-        var w = this.connectorValueToPixels(interval.right, span) - x + 1;
+        var x = 0;
+        var w = track.width;
+        if (row.state === "conditional") {
+            var span = this._connectorLayout.globalSpan;
+            var interval = this.connectorInterval(row.preview);
+            console.log("Interval:", interval);
+            console.log("Span:", span);
+            if (!span || !interval) return;
+            x = this.connectorValueToPixels(interval.left, span);
+            w = this.connectorValueToPixels(interval.right, span) - x + 1;
+        }
         var h = track.height;
         var y = Math.floor(h / 2) - 1;
         console.log("Width", w);
@@ -2605,7 +2706,6 @@
         track.fillRect(x, y + h - 1, w, 1, this.gaugeBackColor());// bottom
         track.fillRect(x, y, 1, h, this.gaugeBackColor());            // left
         track.fillRect(x + w - 1, y, 1, h, this.gaugeBackColor());// right
-        this.drawConnectorValues(row);
     };
 
     Window_Preview.prototype.drawActionIcon = function(bitmap, iconIndex) {
@@ -2637,6 +2737,7 @@
     Window_Preview.prototype.drawConnectorValues = function(row) {
         console.log("Draw connector values");
         //console.log("Row", row);
+        console.log("Discipline", row.discipline);
         //console.log("Preview", row.preview);
         //console.log("Values", row.trackValues);
         if (!row || !row.trackValues) return;
@@ -2645,12 +2746,9 @@
         //console.log("Bitmap", bitmap);
         var span = this._connectorLayout.globalSpan;
         var data = row.preview;
-        var interval = this.connectorInterval(data);
-        var boundaries = this.connectorBoundaries(data.input);
-        if (!span || !interval) return;
+        if (!span) return;
         var axis = this.connectorValueToPixels(0, span);
-        var left = this.connectorValueToPixels(interval.left, span);
-        var right = this.connectorValueToPixels(interval.right, span) - left + 1;
+        var boundaries = this.connectorBoundaries(data.input);
         console.log("Boundaries", boundaries);
         //console.log("Left", left);
         //console.log("Right", right);
@@ -2659,14 +2757,27 @@
         // Same visual idea as redrawInitiative():
         var y = Math.floor(bitmap.height * 0.25);
         bitmap.textColor = "rgba(237,180,130,1.0)";
+        // Input value
+        console.log("Input", data.current);
+        var inputLabel;
+        if (data.current === undefined) {
+            inputLabel = "?";
+        } else {
+            inputLabel = data.current;
+        }
         bitmap.drawText(
-            data.current,
+            inputLabel,
             axis - 12,
             y,
             32,
             bitmap.height,
             "center"
         );
+        var interval = this.connectorInterval(data);
+        console.log("Interval", interval);
+        if (!interval ) return;
+        var left = this.connectorValueToPixels(interval.left, span);
+        var right = this.connectorValueToPixels(interval.right, span) - left + 1;
         bitmap.textColor = this.textColor(6);
         bitmap.outlineWidth = 5;
         if (boundaries !== null) {
@@ -2721,6 +2832,27 @@
             }
         return null;
     };
+
+    //--------------------------------------------------------------------------
+    // Reset connector row sprites
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.clearRowSprites = function() {
+        if (!this._connectorRows) return;
+        for (var i = 0; i < this._connectorRows.length; i++) {
+            var sprite = this._connectorRows[i];
+            sprite.review = null;
+            sprite.state = null;
+            sprite.strict.visible = false;
+            sprite.icon.visible = false;
+            sprite.track.visible = false;
+            sprite.trackValues.visible = false;
+            sprite.mark.visible = false;
+            // Clear previous track and value drawings.
+            sprite.track.bitmap.clear();
+            sprite.trackValues.bitmap.clear();
+        }
+    }
 
     //--------------------------------------------------------------------------
     // Draw actor icon
