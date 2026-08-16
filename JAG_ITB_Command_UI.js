@@ -412,13 +412,27 @@
         var output = item.outputConnectors[discipline];
         var current = state[discipline];
         if (current === undefined && !input && !output) return null;
+        var conditionPassed = true;
+        if (input) {
+            conditionPassed = Game_Action.prototype.checkConnectorCondition(current, input);
+        }
         return {
             discipline: discipline,
             current: current,
             input: input || null,
             output: output || null,
-            strict: state._connectorRules && state._connectorRules[discipline] === "strict"
+            strict: state._connectorRules && state._connectorRules[discipline] === "strict",
+            conditionPassed: conditionPassed
         };
+    };
+
+    //--------------------------------------------------------------------------
+    // Get connector output value
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.getConnectorOutputValue = function(output) {
+        if (!output) return undefined;
+        return output.value;
     };
 
     //--------------------------------------------------------------------------
@@ -1863,6 +1877,9 @@
             // Track
             row.track.x = this.connectorAxisX() - this._connectorLayout.inputOffset;
             row.track.y = row.icon.y - this.connectorTrackHeight() / 2 + 12;
+            // Output track
+            row.outputTrack.x = row.track.x;
+            row.outputTrack.y = row.track.y + this.connectorOutputTrackOffset();
             // Track values
             row.trackValues.x = row.track.x - 4;
             row.trackValues.y = row.track.y - 3 * this.connectorTrackHeight() / 4;
@@ -1890,6 +1907,10 @@
         return 20;
     };
 
+    Window_Preview.prototype.connectorOutputTrackHeight = function() {
+        return Math.max(4, this.connectorTrackHeight() - 2);
+    };
+
     Window_Preview.prototype.connectorTrackWidth = function() {
         return this.connectorTrackRight() - this.connectorTrackLeft();
     };
@@ -1904,6 +1925,19 @@
 
     Window_Preview.prototype.connectorTrackMargin = function() {
         return 10;
+    };
+
+    Window_Preview.prototype.connectorOutputTrackOffset = function() {
+        return 5;
+    };
+
+    Window_Preview.prototype.connectorOutputArrowWidth = function() {
+        var span = this._connectorLayout && this._connectorLayout.globalSpan;
+        if (!span) return 0;
+        return Math.abs(
+            this.connectorValueToPixels(1, span) -
+            this.connectorValueToPixels(0, span)
+        );
     };
 
     //Window_Preview.prototype.connectorTrackLeft = function() {
@@ -1966,22 +2000,30 @@
             case "exact":
                 return {
                     left: row.input.value - row.current,
-                    right: row.input.value - row.current
+                    right: row.input.value - row.current,
+                    leftOpen: false,
+                    rightOpen: false
                 };
             case "min":
                 return {
                     left: row.input.value - row.current,
-                    right: row.displayRange.max - row.current
+                    right: row.displayRange.max - row.current,
+                    leftOpen: false,
+                    rightOpen: true
                 };
             case "max":
                 return {
                     left: row.displayRange.min - row.current,
-                    right: row.input.value - row.current
+                    right: row.input.value - row.current,
+                    leftOpen: true,
+                    rightOpen: false
                 };
             case "range":
                 return {
                     left: row.input.min - row.current,
-                    right: row.input.max - row.current
+                    right: row.input.max - row.current,
+                    leftOpen: false,
+                    rightOpen: false
                 };
             }
         return null;
@@ -2369,6 +2411,14 @@
             row.track.bitmap = new Bitmap(this.connectorTrackWidth(), this.connectorTrackHeight());
             row.track.visible = false;
             this.addChild(row.track);
+            // Output track
+            row.outputTrack = new Sprite();
+            row.outputTrack.bitmap = new Bitmap(
+                this.connectorTrackWidth(),
+                this.connectorOutputTrackHeight()
+            );
+            row.outputTrack.visible = false;
+            this.addChild(row.outputTrack);
             this._connectorRows.push(row);
         }
         // Axis must be above all tracks.
@@ -2423,8 +2473,9 @@
         var min = row.current;
         var max = row.current;
         if (row.output && row.output.mode === "set") {
-            min = Math.min(min, row.output.value);
-            max = Math.max(max, row.output.value);
+            var outputValue = BattleManager.ITB_UI.getConnectorOutputValue(row.output);
+            min = Math.min(min, outputValue);
+            max = Math.max(max, outputValue);
         }
         if (row.input) {
             switch (row.input.type) {
@@ -2639,6 +2690,10 @@
             );
             if (data.state !== "disconnected") {
                 sprite.trackValues.visible = true;
+                var outputValue = BattleManager.ITB_UI.getConnectorOutputValue(data.output);
+                if (outputValue !== undefined && outputValue !== data.current) {
+                    sprite.outputTrack.visible = true;
+                }
             };
         }
         //console.log("Tracks visible", visibleTracks);
@@ -2660,6 +2715,7 @@
             //console.log("Axis", this._connectorLayout.axisX);
             console.log("Input offset", row.inputOffset);
             this.drawConnectorTrack(row);
+            this.drawConnectorOutputTrack(row);
             this.drawConnectorValues(row);
         }, this);
         /* rows.forEach(function(data) {
@@ -2671,41 +2727,6 @@
             if (!data.input) return;
             this.drawConnectorTrack(row.track.bitmap, data);
         }, this); */
-    };
-
-    Window_Preview.prototype.drawConnectorTrack = function(row) {
-        if (!row || !row.track || !row.track.visible) return;
-        //if (row.state !== "conditional" && row.state !== "unconditional") return;
-        track = row.track.bitmap;
-        track.clear();
-        console.log("Draw connector track");
-        console.log("Bitmap", track);
-        //bitmap.fillRect(0, y, w, 2, "rgba(80,80,80,1)");
-        var color1 = this.textColor(30);   // gauge left
-        var color2 = this.textColor(9);   // gauge right
-        var x = 0;
-        var w = track.width;
-        if (row.state === "conditional") {
-            var span = this._connectorLayout.globalSpan;
-            var interval = this.connectorInterval(row.preview);
-            console.log("Interval:", interval);
-            console.log("Span:", span);
-            if (!span || !interval) return;
-            x = this.connectorValueToPixels(interval.left, span);
-            w = this.connectorValueToPixels(interval.right, span) - x + 1;
-        }
-        var h = track.height;
-        var y = Math.floor(h / 2) - 1;
-        console.log("Width", w);
-        console.log("Height", h);
-        console.log("X-position", x);
-        console.log("Y-position", y);
-        track.gradientFillRect(x, y, w, h, color1, color2);
-        // thin border
-        track.fillRect(x, y, w, 1, this.gaugeBackColor());             // top
-        track.fillRect(x, y + h - 1, w, 1, this.gaugeBackColor());// bottom
-        track.fillRect(x, y, 1, h, this.gaugeBackColor());            // left
-        track.fillRect(x + w - 1, y, 1, h, this.gaugeBackColor());// right
     };
 
     Window_Preview.prototype.drawActionIcon = function(bitmap, iconIndex) {
@@ -2726,6 +2747,149 @@
         } else {
             this.drawHeaderEnemy(bitmap, source.sprite);
         }
+    };
+
+    Window_Preview.prototype.drawConnectorTrack = function(row) {
+        if (!row || !row.track || !row.track.visible) return;
+        //if (row.state !== "conditional" && row.state !== "unconditional") return;
+        track = row.track.bitmap;
+        track.clear();
+        console.log("Draw connector track");
+        console.log("Bitmap", track);
+        //bitmap.fillRect(0, y, w, 2, "rgba(80,80,80,1)");
+        //var color1 = this.textColor(30);   // gauge left
+        //var color2 = this.textColor(9);   // gauge right
+        var color1;
+        var color2;
+        if (row.state === "conditional") {
+            if (row.preview && row.preview.conditionPassed) {
+                color1 = "rgba(70,120,70,0.9)";
+                color2 = "rgba(150,210,150,0.9)";
+            } else {
+                color1 = "rgba(130,60,60,0.9)";
+                color2 = "rgba(220,130,130,0.9)";
+            }
+        } else {
+            color1 = this.textColor(30);
+            color2 = this.textColor(9);
+        }
+        var x = 0;
+        var w = track.width;
+        var interval = null;
+        if (row.state === "conditional") {
+            var span = this._connectorLayout.globalSpan;
+            var interval = this.connectorInterval(row.preview);
+            console.log("Interval:", interval);
+            console.log("Span:", span);
+            if (!span || !interval) return;
+            x = this.connectorValueToPixels(interval.left, span);
+            w = this.connectorValueToPixels(interval.right, span) - x + 1;
+        }
+        var openWidth = this.connectorOpenEndWidth();
+        var leftX = x + openWidth;
+        var rightX = x + w - openWidth - 1;
+        var bodyWidth = w - 2 * openWidth;
+        var h = track.height;
+        var y = Math.floor(h / 2) - 1;
+        console.log("Width", w);
+        console.log("Height", h);
+        console.log("X-position", x);
+        console.log("Y-position", y);
+        // thin border
+        //track.fillRect(leftX, y, bodyWidth, 1, this.gaugeBackColor());             // top
+        //track.fillRect(leftX, y + h - 1, bodyWidth, 1, this.gaugeBackColor());// bottom
+        if (!interval || interval.leftOpen) {
+            this.drawConnectorOpenTeeth(track, leftX, y, h, -1, color1); // left
+            if (!interval || interval.rightOpen) {
+                track.gradientFillRect(leftX, y, bodyWidth, h, color1, color2);
+                track.fillRect(leftX, y, bodyWidth, 1, this.gaugeBackColor()); // top
+                track.fillRect(leftX, y + h - 1, bodyWidth, 1, this.gaugeBackColor()); // bottom
+            } else {
+                track.gradientFillRect(leftX, y, w - openWidth, h, color1, color2);
+                track.fillRect(leftX, y, w - openWidth, 1, this.gaugeBackColor()); // top
+                track.fillRect(leftX, y + h - 1, w - openWidth, 1, this.gaugeBackColor()); // bottom
+            }
+        } else {
+            track.fillRect(x, y, 1, h, this.gaugeBackColor()); // left
+            if (!interval || interval.rightOpen) {
+                track.gradientFillRect(x, y, w - openWidth, h, color1, color2);
+                track.fillRect(x, y, w - openWidth, 1, this.gaugeBackColor()); // top
+                track.fillRect(x, y + h - 1, w - openWidth, 1, this.gaugeBackColor()); // bottom
+            } else {
+                track.gradientFillRect(x, y, w, h, color1, color2);
+                track.fillRect(x, y, w, 1, this.gaugeBackColor()); // top
+                track.fillRect(x, y + h - 1, w, 1, this.gaugeBackColor()); // bottom
+            }
+        }
+        if (!interval || interval.rightOpen) {
+            this.drawConnectorOpenTeeth(track, rightX, y, h, 1, color2); // right
+        } else {
+            track.fillRect(x + w - 1, y, 1, h, this.gaugeBackColor()); // right
+        }
+    };
+
+    Window_Preview.prototype.drawConnectorOutputTrack = function(row) {
+        if (!row || !row.outputTrack || !row.outputTrack.visible) return;
+        var track = row.outputTrack.bitmap;
+        track.clear();
+        var data = row.preview;
+        if (!data || data.current === undefined) return;
+        var input = data.current;
+        var output = BattleManager.ITB_UI.getConnectorOutputValue(data.output);
+        if (output === undefined || output === input) return;
+        var span = this._connectorLayout.globalSpan;
+        if (!span) return;
+        var inputX = this.connectorValueToPixels(0, span);
+        var outputX = this.connectorValueToPixels(output - input, span);
+        var left = Math.min(inputX, outputX);
+        var right = Math.max(inputX, outputX);
+        var arrowWidth = this.connectorOutputArrowWidth();
+        var trackHeight = track.height;
+        var y = Math.floor(trackHeight / 2);
+        var direction = output > input ? 1 : -1;
+        var trackLeft;
+        var trackWidth;
+        if (direction > 0) {
+            trackLeft = inputX;
+            trackWidth = outputX - inputX - arrowWidth;
+        } else {
+            trackLeft = outputX + arrowWidth;
+            trackWidth = inputX - outputX - arrowWidth;
+        }
+        trackWidth = Math.max(1, trackWidth);
+        var color1 = "rgba(140,155,160,0.95)";
+        var color2 = "rgba(190,205,210,0.95)";
+        track.gradientFillRect(
+            trackLeft,
+            y,
+            trackWidth,
+            trackHeight,
+            color1,
+            color2
+        );
+        // Thin border around the track body.
+        /* track.fillRect(
+            trackLeft,
+            y,
+            trackWidth,
+            1,
+            this.gaugeBackColor()
+        ); */
+        // Arrow head at the output value.
+        track.context.beginPath();
+        if (direction > 0) {
+            track.context.fillStyle = color2;
+            track.context.moveTo(outputX, y + trackHeight / 4);
+            track.context.lineTo(outputX - arrowWidth, y);
+            track.context.lineTo(outputX - arrowWidth, y + trackHeight / 2);
+        } else {
+            track.context.fillStyle = color1;
+            track.context.moveTo(outputX, y + trackHeight / 4);
+            track.context.lineTo(outputX + arrowWidth, y);
+            track.context.lineTo(outputX + arrowWidth, y + trackHeight / 2);
+        }
+        track.context.closePath();
+        track.context.fill();
     };
 
     /* Window_Preview.prototype.drawHeaderArrow = function(bitmap) {
@@ -2752,19 +2916,26 @@
         console.log("Boundaries", boundaries);
         //console.log("Left", left);
         //console.log("Right", right);
-        bitmap.fontSize = 20;
-        bitmap.outlineWidth = 6;
-        // Same visual idea as redrawInitiative():
-        var y = Math.floor(bitmap.height * 0.25);
-        bitmap.textColor = "rgba(237,180,130,1.0)";
         // Input value
         console.log("Input", data.current);
-        var inputLabel;
-        if (data.current === undefined) {
-            inputLabel = "?";
+        var inputLabel = data.current;
+        var outputLabel = BattleManager.ITB_UI.getConnectorOutputValue(data.output);
+        if (inputLabel !== undefined) {
+            bitmap.textColor = "rgba(237,180,130,1.0)";
+        } else if (outputLabel !== undefined) {
+            inputLabel = outputLabel;
+            bitmap.textColor = "rgba(225,235,240,1.0)";
         } else {
-            inputLabel = data.current;
+            inputLabel = "?";
+            bitmap.textColor = "rgba(234,19,45,1.0)";
         }
+        bitmap.fontSize = 20;
+        bitmap.outlineWidth = 6;
+        console.log("Input label", inputLabel);
+        console.log("Output label", outputLabel);
+        console.log("Axis X-position", axis);
+        // Same visual idea as redrawInitiative():
+        var y = Math.floor(bitmap.height * 0.25);
         bitmap.drawText(
             inputLabel,
             axis - 12,
@@ -2773,27 +2944,46 @@
             bitmap.height,
             "center"
         );
+        if (outputLabel !== undefined && outputLabel !== inputLabel) {
+            var outputX = this.connectorValueToPixels(outputLabel - inputLabel, span);   
+            console.log("Output X-position", outputX);
+            bitmap.textColor = "rgba(225,235,240,1.0)";
+            bitmap.outlineWidth = 6;
+            bitmap.drawText(
+                outputLabel,
+                outputX - 12,
+                y,
+                32,
+                bitmap.height,
+                "center"
+            );
+        }
         var interval = this.connectorInterval(data);
         console.log("Interval", interval);
         if (!interval ) return;
         var left = this.connectorValueToPixels(interval.left, span);
-        var right = this.connectorValueToPixels(interval.right, span) - left + 1;
+        var right = this.connectorValueToPixels(interval.right, span) + 1;
+        console.log("Left boundary", left);
+        console.log("Right boundary", right);
         bitmap.textColor = this.textColor(6);
         bitmap.outlineWidth = 5;
         if (boundaries !== null) {
-            if (boundaries.left !== undefined && boundaries.left !== data.current) {
-                bitmap.drawText(
-                    boundaries.left,
-                    left - 8,
-                    y,
-                    32,
-                    bitmap.height,
-                    "center"
-                );
+            if (boundaries.left !== undefined && 
+                boundaries.left !== data.current &&
+                boundaries.left !== outputLabel) {
+                    bitmap.drawText(
+                        boundaries.left,
+                        left - 8,
+                        y,
+                        32,
+                        bitmap.height,
+                        "center"
+                    );
             }
             if (boundaries.right !== undefined && 
                 boundaries.right !== boundaries.left &&
-                boundaries.right !== data.current) {
+                boundaries.right !== data.current &&
+                boundaries.right !== outputLabel) {
                     bitmap.drawText(
                         boundaries.right,
                         right - 12,
@@ -2846,10 +3036,12 @@
             sprite.strict.visible = false;
             sprite.icon.visible = false;
             sprite.track.visible = false;
+            sprite.outputTrack.visible = false;
             sprite.trackValues.visible = false;
             sprite.mark.visible = false;
             // Clear previous track and value drawings.
             sprite.track.bitmap.clear();
+            sprite.outputTrack.bitmap.clear();
             sprite.trackValues.bitmap.clear();
         }
     }
@@ -2946,6 +3138,47 @@
             this.contents.fillRect(this.connectorAxisX(), y, 2, 4, color);
             //this.contents.fillRect(this.connectorAxisX() - 1, 0, 4, this.contentsHeight(), "red");
         }*/
+    };
+
+    //--------------------------------------------------------------------------
+    // Connector track geometry helpers
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.connectorOpenEndWidth = function() {
+        var span = this._connectorLayout && this._connectorLayout.globalSpan;
+        if (!span) return 0;
+        return Math.abs(
+            this.connectorValueToPixels(0.15, span) -
+            this.connectorValueToPixels(0, span)
+        );
+    };
+
+    Window_Preview.prototype.drawConnectorOpenTeeth = function(bitmap, x, y, h, dir, color) {
+        var w = this.connectorOpenEndWidth();
+        if (w <= 0) return;
+        bitmap.context.fillStyle = color;
+        //var toothWidth = w;
+        //var toothHeight = h;
+        var spacing = 3 * h / 8 - 1;
+        for (var i = 0; i < 2; i++) {
+            var top = y + i * spacing + 1;
+            var bottom = top + spacing;
+            var middle = top + spacing / 2;
+            bitmap.context.beginPath();
+            if (dir < 0) {
+                // Open toward the left.
+                bitmap.context.moveTo(x, top);
+                bitmap.context.lineTo(x - w, middle);
+                bitmap.context.lineTo(x, bottom);
+            } else {
+                // Open toward the right.
+                bitmap.context.moveTo(x, top);
+                bitmap.context.lineTo(x + w, middle);
+                bitmap.context.lineTo(x, bottom);
+            }
+            bitmap.context.closePath();
+            bitmap.context.fill();
+        }
     };
 
     //==========================================================================
