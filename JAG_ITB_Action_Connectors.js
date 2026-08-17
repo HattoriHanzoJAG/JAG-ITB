@@ -240,14 +240,14 @@
     // BattleManager Extensions
     //=============================================================================
 
-    BattleManager.currentConnectorState = function(actor) {
+    /* BattleManager.currentConnectorState = function(actor) {
         console.log("Current Connector State")
         if (actor.queueLength() <= 0) {
             return actor._selectedTarget.connectorState();
         }
         var last = actor.lastQueuedActionData();
         return JsonEx.makeDeepCopy(last.resultState);
-    };
+    }; */
 
     BattleManager.connectorValidationState = function(actor) {
         // Combo continuation
