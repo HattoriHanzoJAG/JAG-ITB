@@ -637,7 +637,7 @@
     };
 
     // Validate Entire State
-    Game_Action.prototype.canConnectToState = function(state) {
+    /* Game_Action.prototype.canConnectToState = function(state) {
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
             console.log("CAN CONNECT TO STATE");
             console.log("Skill:", this.item().name);
@@ -647,7 +647,6 @@
         if (!skill) return false;
         var rawInputs = skill.inputConnectors || {};
         var inputs = {};
-        //var inputs = skill.inputConnectors || {};
         Object.keys(rawInputs).forEach(function(key) {
             inputs[key] = this.normalizeConnector(rawInputs[key]);
         }, this);
@@ -689,11 +688,57 @@
         }
         if (DEBUG_CONNECTORS) console.log("ALL CONNECTOR CHECKS PASSED");
         return true;
+    }; */
+
+    // Validate Entire State
+    Game_Action.prototype.canConnectToState = function(state) {
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
+            console.log("CAN CONNECT TO STATE");
+            console.log("Skill:", this.item().name);
+            console.log("State:", state);
+        }
+        var validation = this.connectorValidation(state);
+        var keys = Object.keys(validation);
+        for (var i = 0; i < keys.length; i++) {
+            if (!validation[keys[i]]) return false;
+        }
+        if (DEBUG_CONNECTORS) console.log("ALL CONNECTOR CHECKS PASSED");
+        return true;
     };
 
-    Game_Action.prototype.isValidConnectorSkill = function(state) {
-        return this.canConnectToState(state);
+    // Per connector validation
+    Game_Action.prototype.connectorValidation = function(state) {
+        var skill = this.item();
+        if (!skill || !state) return {};
+        var inputs = skill.inputConnectors || {};
+        var rules = state._connectorRules || {};
+        var result = {};
+        var ruleKeys = Object.keys(rules);
+        if (DEBUG_CONNECTORS) {
+            console.log("Inputs:", inputs);
+            console.log("Rules:", rules);
+            console.log("HAS RULES?", !!state._connectorRules, state._connectorRules);
+        }
+        // First establish strict/lax validity.
+        for (var i = 0; i < ruleKeys.length; i++) {
+            var name = ruleKeys[i];
+            if (rules[name] !== "strict") continue;
+            result[name] = !!inputs[name];
+        }
+        // Then evaluate explicit input connectors.
+        var keys = Object.keys(inputs);
+        for (var j = 0; j < keys.length; j++) {
+            var name = keys[j];
+            var condition = inputs[name];
+            var value = state[name];
+            result[name] = this.checkConnectorCondition(value, condition);
+        }
+        return result;
     };
+
+    //Game_Action.prototype.isValidConnectorSkill = function(state) {
+    //    return this.canConnectToState(state);
+    //};
     
     Game_Action.prototype.normalizeConnector = function(conn) {
         // no connector at all

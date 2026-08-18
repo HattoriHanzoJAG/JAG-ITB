@@ -328,6 +328,7 @@
         //console.log("Actor", actor);
         //console.log("Action", actionData);
         if (!actor || !actionData) return [];
+        this.refreshConnectorValidation(actor);
         var item = this.actionObject(actionData);
         //console.log("Item", item);
         if (!item) return [];
@@ -412,17 +413,17 @@
         var output = item.outputConnectors[discipline];
         var current = state[discipline];
         if (current === undefined && !input && !output) return null;
-        var conditionPassed = true;
-        if (input) {
-            conditionPassed = Game_Action.prototype.checkConnectorCondition(current, input);
-        }
+        var validation = BattleManager.ITB_UI.getConnectorValidation(item);
+        //if (input) {
+        //    connectorValid = Game_Action.prototype.canConnectToState(state);
+        //}
         return {
             discipline: discipline,
             current: current,
             input: input || null,
             output: output || null,
             strict: state._connectorRules && state._connectorRules[discipline] === "strict",
-            conditionPassed: conditionPassed
+            connectorValid: validation ? validation[discipline] : false
         };
     };
 
@@ -433,6 +434,47 @@
     BattleManager.ITB_UI.getConnectorOutputValue = function(output) {
         if (!output) return undefined;
         return output.value;
+    };
+
+    //--------------------------------------------------------------------------
+    // Read-oriented cache of connector conditions
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.refreshConnectorValidation = function(actor) {
+        this._connectorValidation = {};
+        if (!actor) return;
+        var state = BattleManager.connectorValidationState(actor);
+        if (!state) return;
+        var skills = actor.skills();
+        for (var i = 0; i < skills.length; i++) {
+            var item = skills[i];
+            if (!item) continue;
+            var action = new Game_Action(actor);
+            action.setSkill(item.id);
+            this._connectorValidation[item.id] = action.connectorValidation(state);
+        }
+    };
+
+    //--------------------------------------------------------------------------
+    // Connector validation helpers
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.getConnectorValidation = function(item) {
+        if (!item) return null;
+        return this._connectorValidation[item.id] || null;
+    };
+
+    BattleManager.ITB_UI.isConnectorStateValid = function(item) {
+        console.log("Is Connector State Valid");
+        console.log("Item", item);
+        var validation = this.getConnectorValidation(item);
+        console.log("Validation", validation);
+        if (!validation) return false;
+        var keys = Object.keys(validation);
+        for (var i = 0; i < keys.length; i++) {
+            if (!validation[keys[i]]) return false;
+        }
+        return true;
     };
 
     //--------------------------------------------------------------------------
@@ -1807,6 +1849,7 @@
     Window_Preview.prototype.layoutConnectorHeader = function() {
         this.layoutConnectorHeaderX();
         var y = this.headerY();
+        this._header.validity.y = y + 4;
         this._header.inputIcon.y = y;
         this._header.arrow.y = y + 8;
         this._header.previewIcon.y = y;
@@ -1821,6 +1864,7 @@
         }
         //console.log("Header X", x);
         //console.log("Header Layout X", this._header.x);
+        this._header.validity.x = x - Window_Base._iconWidth;
         this._header.inputIcon.x = x;
         this._header.arrow.x = x + this.headerSpacing() + 6;
         this._header.previewIcon.x = this._header.arrow.x + this.headerArrowSpacing();
@@ -1849,11 +1893,11 @@
     };
 
     Window_Preview.prototype.headerSpacing = function() {
-        return 40;
+        return 38;
     };
 
     Window_Preview.prototype.headerArrowSpacing = function() {
-        return 30;
+        return 26;
     };
 
     Window_Preview.prototype.layoutConnectorRows = function() {
@@ -1869,6 +1913,9 @@
             console.log("Index", visibleIndex);
             row.icon.y = startY + visibleIndex * this.connectorRowSpacing();
             console.log("Icon y", row.icon.y);
+            // Connector validity indicator
+            row.validity.x = this.connectorValidityX();
+            row.validity.y = row.icon.y + 3;
             // Strict marker
             row.strict.x = this.connectorStrictX();
             row.strict.y = row.icon.y + 4;
@@ -1891,8 +1938,12 @@
         }, this);
     };
 
-    Window_Preview.prototype.connectorStrictX = function() {
+    Window_Preview.prototype.connectorValidityX = function() {
         return 14;
+    }
+
+    Window_Preview.prototype.connectorStrictX = function() {
+        return this.connectorValidityX() + 28;
     };
 
     Window_Preview.prototype.connectorIconX = function() {
@@ -2353,6 +2404,11 @@
 
     Window_Preview.prototype.createConnectorHeader = function() {
         this._header = {};
+        this._header.validityCheck = ImageManager.loadSystem("check-mark2-24");
+        this._header.validityInterdiction = ImageManager.loadSystem("interdiction2-24");
+        this._header.validity = new Sprite(this._header.validityCheck);
+        this._header.validity.visible = true;
+        this.addChild(this._header.validity);
         this._header.inputIcon = new Sprite();
         this._header.inputIcon.bitmap = new Bitmap(32, 32);
         this.addChild(this._header.inputIcon);
@@ -2438,6 +2494,13 @@
             row.mark.visible = false;
             this.addChild(row.mark);
             //this._connectorRows.push(row);
+            // Connector validity indicator
+            row.validityCheck = ImageManager.loadSystem("check-mark2-24");
+            row.validityInterdiction = ImageManager.loadSystem("cross-mark2-24");
+            row.validity = new Sprite();
+            row.validity.bitmap = row.validityInterdiction;
+            row.validity.visible = false;
+            this.addChild(row.validity);
         }, this);
     };
 
@@ -2611,8 +2674,15 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.drawConnectorHeader = function() {
+        console.log("Draw connector header");
         var actor = this._actor;
         var item = this._item;
+        console.log("Connector state validity", BattleManager.ITB_UI.isConnectorStateValid(item));
+        this._header.validity.bitmap =
+            BattleManager.ITB_UI.isConnectorStateValid(item)
+            ? this._header.validityCheck
+            : this._header.validityInterdiction;
+        console.log("Validity bitmap", this._header.validity.bitmap);
         var inputBitmap = this._header.inputIcon.bitmap;
         var outputBitmap = this._header.previewIcon.bitmap;
         //var arrowBitmap = this._header.arrow.bitmap;
@@ -2688,6 +2758,10 @@
                 data.state === "invalid" ||
                 data.state === "disconnected"
             );
+            sprite.validity.visible = true;
+            sprite.validity.bitmap = data.connectorValid
+                ? sprite.validityCheck
+                : sprite.validityInterdiction;
             if (data.state !== "disconnected") {
                 sprite.trackValues.visible = true;
                 var outputValue = BattleManager.ITB_UI.getConnectorOutputValue(data.output);
@@ -2762,7 +2836,7 @@
         var color1;
         var color2;
         if (row.state === "conditional") {
-            if (row.preview && row.preview.conditionPassed) {
+            if (row.preview && row.preview.connectorValid) {
                 color1 = "rgba(70,120,70,0.9)";
                 color2 = "rgba(150,210,150,0.9)";
             } else {
@@ -3031,7 +3105,7 @@
         if (!this._connectorRows) return;
         for (var i = 0; i < this._connectorRows.length; i++) {
             var sprite = this._connectorRows[i];
-            sprite.review = null;
+            sprite.preview = null;
             sprite.state = null;
             sprite.strict.visible = false;
             sprite.icon.visible = false;
@@ -3039,6 +3113,7 @@
             sprite.outputTrack.visible = false;
             sprite.trackValues.visible = false;
             sprite.mark.visible = false;
+            sprite.validity.visible = false;
             // Clear previous track and value drawings.
             sprite.track.bitmap.clear();
             sprite.outputTrack.bitmap.clear();
