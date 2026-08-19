@@ -643,7 +643,17 @@
         if (!selected || !selected._queueMarker) return;
         //selected.opacity = 255;
         //selected.setBlendColor([255, 255, 100, 64]);
-        selected._queueMarker.visible = !selected._queueMarker.visible;
+        // Already confirmed: keep the queue marker visible.
+        if (selected._queueMarker.visible) {
+            selected._queueMarker.visible = false;
+            this.clearSelectionHighlights();
+            this._pendingCommand = "repeatAction";
+            this._commandDelay = 2;
+            return;
+        }
+        //selected._queueMarker.visible = !selected._queueMarker.visible;
+        // New confirmation
+        selected._queueMarker.visible = true;
         this.refreshSelection();
         //this.updatePreviewWindow(selected);
     };
@@ -737,6 +747,9 @@
                 var command = this._pendingCommand;
                 this._pendingCommand = null;
                 switch (command) {
+                case "repeatAction":
+                    this.repeatAction();
+                    break;
                 case "skill":
                     this.showActionsCommand("skills");
                     break;
@@ -1260,6 +1273,18 @@
             }
         }
         return null;
+    };
+
+    //--------------------------------------------------------------------------
+    // Repeat action wrapper
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.repeatAction = function() {
+        console.log("REPEAT ACTION");
+        var selected = this.currentSelectionSprite();
+        if (!selected || !selected._queueMarker) return;
+        selected._queueMarker.visible = true;
+        this.refreshSelection();
     };
 
     //--------------------------------------------------------------------------
