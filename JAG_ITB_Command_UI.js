@@ -478,6 +478,22 @@
     };
 
     //--------------------------------------------------------------------------
+    // State preview data
+    //--------------------------------------------------------------------------
+
+    BattleManager.ITB_UI.getActionStatePreview = function(actor, item) {
+        if (!actor || !item || !item.selfState) return null;
+        var state = $dataStates[item.selfState.stateId];
+        if (!state) return null;
+        var initiative = actor._initiative || 0;
+        return {
+            stateId: item.selfState.stateId,
+            delay: item.selfState.offset,
+            duration: null
+        };
+    };
+
+    //--------------------------------------------------------------------------
     // Queued action ID helper
     //--------------------------------------------------------------------------
 
@@ -1775,15 +1791,16 @@
 
     Window_Preview.prototype.refresh = function() {
         console.log("Refresh preview window");
-        this._previewRows = BattleManager.ITB_UI.previewConnectorRows(this._actor, this._data);
+        var action = this._data;
+        if (!action) return;
+        this._previewRows = BattleManager.ITB_UI.previewConnectorRows(this._actor, action);
         this.refreshWindowSize();
         this.contents.clear();
         //var x = this.textPadding();
         //var y = 0;
         //var w = this.contentsWidth() - this.textPadding() * 2;
-        var action = this._data;
-        if (!action) return;
         this.drawTitle(action);
+        this.drawScope();
         this.drawConnectorRows();
         this.drawConnectorHeader();
         this.layoutConnectorAxis();
@@ -1792,8 +1809,9 @@
         //y += this.lineHeight() + 6;
         //this.drawTextEx(this._item.description || "", x, y);
         this.drawSeparator();
+        this.drawDescription();
         this.layoutBadges();
-        if (this._item) this.refreshBadges();
+        this.refreshBadges();
     };
 
     Window_Preview.prototype.refreshBadges = function() {
@@ -1830,6 +1848,10 @@
 
     Window_Preview.prototype.separatorHeight = function() {
         return this.fittingHeight(this.requiredLines() - 2.5);
+    };
+
+    Window_Preview.prototype.separatorMargin = function() {
+        return 16;
     };
 
     Window_Preview.prototype.layoutBadges = function() {
@@ -1992,7 +2014,7 @@
     };
 
     Window_Preview.prototype.connectorTrackRight = function() {
-        return this.separatorX() - 16;
+        return this.separatorX() - this.separatorMargin();
     };
 
     Window_Preview.prototype.connectorTrackLeft = function() {
@@ -2385,13 +2407,43 @@
         if (this._item) {
             lines += this._previewRows.length;
         }
-        lines += this.descriptionLines();
+        lines = Math.max(lines, this.descriptionLines());
+        /* console.log(
+            "Preview requiredLines:",
+            this._item ? this._item.name : null,
+            "previewRows:",
+            this._previewRows,
+            "previewRows.length:",
+            this._previewRows ? this._previewRows.length : null,
+            "lines:",
+            lines,
+            "descriptionLines:",
+            this.descriptionLines()
+        ); */
         return lines;
     };
 
     Window_Preview.prototype.descriptionLines = function() {
-        // Placeholder until descriptions are implemented.
-        return 0;
+        if (!this._item) return 0;
+        var lines = 0;
+        // Database description
+        if (this._item.description) lines += this.descriptionTextLines().length;
+        // States inflicted by this action
+        lines += this.statePreviewLines();
+        if (this._item && this._item.selfState) lines += 1;
+        if (this._item && this._item.effects) {
+            this._item.effects.forEach(function(effect) {
+                if (effect.code === Game_Action.EFFECT_ADD_STATE) lines += 1;
+            });
+        }
+        return lines;
+    };
+
+    Window_Preview.prototype.statePreviewLines = function() {
+        if (!this._item || !this._item.selfState) return 0;
+        var state = $dataStates[this._item.selfState.stateId];
+        if (!state) return 0;
+        return 1;
     };
 
     //--------------------------------------------------------------------------
@@ -2406,6 +2458,7 @@
         var iconSize = 28;
         var spacing = 8;
         this.contents.fontSize = 26;
+        this.changeTextColor(this.normalColor());
         var textWidth = this.textWidth(actionData.name);
         var totalWidth = iconSize + spacing + textWidth;
         var x = Math.floor((this.contentsWidth() - totalWidth) / 2);
@@ -2417,10 +2470,258 @@
         this.resetFontSettings();
     };
 
-    Window_PreviewType.prototype.setText = function(text) {
+    Window_Preview.prototype.drawScope = function() {
+        console.log("Scope", this._item.scope);
+        if (!this._item || !this._item.scope) return;
+        this.contents.fontSize = 18;
+        var scopeText = this.scopeText(this._item.scope);
+        //var iconSize = 54;
+        var spacing = 8;
+        var w = this.contentsWidth() - spacing;
+        this.drawScopeTarget(this.textWidth(scopeText) * 2);
+        //var scopeWidth = this.textWidth(scopeText);
+        //this.drawText(scopeText, -iconSize, 6, w, "right");
+        this.drawText(scopeText, 0, 6, w, "right");
+        this.resetFontSettings();
+    };
+
+    Window_Preview.prototype.drawDescription = function() {
+        var lines = this.descriptionTextLines();
+        var x = this.separatorX() + this.separatorMargin();
+        var y = this.lineHeight();
+        var numLines = lines.length;
+        var w = this.contentsWidth() - x;
+        if (numLines) {
+            this.contents.fontSize = 20;
+            this.changeTextColor(this.normalColor());
+            lines.forEach(function(line, index) {
+                this.drawText(line, x, y + index * this.lineHeight(), w);
+            }, this);
+            this.resetFontSettings();
+        }
+        //this.drawStates((lines + 1) * this.lineHeight());
+        this.drawStates((numLines + 1) * this.lineHeight());
+    };
+
+    Window_Preview.prototype.drawScopeTarget = function(w) {
+        var target = this._actor ? this._actor._connectorPreviewTarget : null;
+        console.log("DRAW SCOPE TARGET");
+        console.log("Actor:", this._actor);
+        console.log("Target:", target);
+        console.log("Contents:", this.contents);
+        console.log("Contents size:", this.contents.width, this.contents.height);
+        if (!target) return;
+        var size = 54;
+        var x = this.contentsWidth() - size / 4 - w;
+        var y = -9;
+        var redrawCallback = function() {
+            console.log("TARGET BITMAP READY -> PREVIEW REFRESH");
+            this.refresh();
+        }.bind(this)
+        /* var bitmap = ImageManager.loadSystem("TargetBoard");
+        if (!bitmap.isReady()) {
+            bitmap.addLoadListener(function() {
+                this.refresh();
+            }.bind(this));
+            return;
+        }
+        w = bitmap.width;
+        h = bitmap.heigth; */
+        console.log("Drawing target background");
+        this.drawTargetBackgroundAt(target, x, y, size, redrawCallback);
+        size = 20;
+        x = this.contentsWidth() - w + 4;
+        y = 9;
+        if (target.isActor()) {
+            this.drawTargetMiniIconAt(target, x, y + 3, size, redrawCallback);
+        } else {
+            //var dw = this.contentsWidth() / 2 - 2;
+            this.drawTargetMiniIconAt(target, x, y, size, redrawCallback);
+        }
+    };
+
+    Window_Preview.prototype.scopeText = function(scope) {
+        switch (scope) {
+            case 0:
+                return "No Target";
+            case 1:
+                return "Enemy";
+            case 2:
+                return "AoE";
+            case 3:
+                return "Random Enemy";
+            case 4:
+                return "Two Random Enemies";
+            case 5:
+                return "Three Random Enemies";
+            case 6:
+                return "Four Random Enemies";
+            case 7:
+                return "Ally";
+            case 8:
+                return "All Allies";
+            case 9:
+                return "Dead Ally";
+            case 10:
+                return "All Dead Allies";
+            case 11:
+                return "Self";
+            default:
+                return "";
+        }
+    };
+
+    Window_Preview.prototype.descriptionTextLines = function() {
+        if (!this._item || !this._item.description) return [];
+        var text = this._item.description;
+        var width = this.contentsWidth() - this.separatorX() - this.separatorMargin();
+        //console.log("Contents width", this.contentsWidth());
+        //console.log("Separator X", this.separatorX());
+        //console.log("Text width", width);
+        var lines = [];
+        var current = "";
+        var words = text.split(" ");
+        for (var i = 0; i < words.length; i++) {
+            var test = current ? current + " " + words[i] : words[i];
+            //console.log("Test", test);
+            //console.log("Test width", this.textWidth(test));
+            if (this.textWidth(test) > 2 * width && current) {
+                lines.push(current);
+                current = words[i];
+            } else {
+                current = test;
+            }
+        }
+        if (current) lines.push(current);
+        return lines;
+    };
+
+    /* Window_PreviewType.prototype.setText = function(text) {
         if (this._text === text) return;
         this._text = text;
         this.refresh();
+    }; */
+
+    //--------------------------------------------------------------------------
+    // Draw state helpers
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawStates = function(y) {
+        var selfStates = [];
+        var targetStates = [];
+        // Custom self-state
+        if (this._item.selfState) {
+            selfStates.push({
+                stateId: this._item.selfState.stateId,
+                offset: Number(this._item.selfState.offset || 0)
+            });
+        }
+        // Database Add State effects
+        this._item.effects.forEach(function(effect) {
+            if (effect.code !== Game_Action.EFFECT_ADD_STATE) return;
+            targetStates.push({
+                stateId: effect.dataId,
+                offset: 0
+            });
+        });
+        var x = this.separatorX() + this.separatorMargin();
+        var rowHeight = this.lineHeight();
+        var labelWidth = 75;
+        // Self states
+        selfStates.forEach(function(state, index) {
+            // Self label only on first row
+            if (index === 0) {
+                this.contents.fontSize = 20;
+                this.changeTextColor(this.textColor(6));
+                this.drawText("Self:", x, y, labelWidth);
+            }
+            this.drawState(state, x + labelWidth, y);
+            y += rowHeight;
+        }, this);
+        // Target states
+        targetStates.forEach(function(state, index) {
+            // Self label only on first row
+            if (index === 0) {
+                this.contents.fontSize = 20;
+                this.changeTextColor(this.textColor(6));
+                this.drawText("Target:", x, y, labelWidth);
+            }
+            this.drawState(state, x + labelWidth, y);
+            y += rowHeight;
+        }, this);
+    };
+
+    Window_Preview.prototype.drawState = function(stateData, x, y) {
+        var state = $dataStates[stateData.stateId];
+        if (!state) return;
+        var iconSize = 28;
+        var spacing = 8;
+        // State icon
+        this.drawScaledIcon(state.iconIndex, x, y + 4, iconSize);
+        var nameX = x + iconSize + spacing;
+        // Self-state trigger offset
+        console.log("State:", stateData);
+        console.log("Offset:", stateData.offset);
+        if (stateData.offset > 0) {
+            var triggerBitmap = ImageManager.loadSystem("trigger-32");
+            var triggerSize = 32;
+            console.log("Ready:", triggerBitmap.isReady());
+            if (!triggerBitmap.isReady()) {
+                if (!triggerBitmap._itbRedrawRegistered) {
+                    triggerBitmap._itbRedrawRegistered = true;
+                    triggerBitmap.addLoadListener(function() {
+                        this.refresh();
+                    }.bind(this));
+                }
+                return;
+            }
+            this.contents.blt(
+                triggerBitmap,
+                0,
+                0,
+                triggerBitmap.width,
+                triggerBitmap.height,
+                nameX,
+                y + 2,
+                triggerSize,
+                triggerSize
+            );
+            // Offset number inside the trigger icon
+            this.contents.fontSize = 18;
+            this.changeTextColor("#F7E839");
+            this.drawText(
+                String(stateData.offset), 
+                nameX, 
+                y + 1, 
+                triggerSize - 1, 
+                "center"
+            );
+            this.resetFontSettings();
+            nameX += triggerSize + spacing;
+        }
+        // State name
+        this.contents.fontSize = 20;
+        this.changeTextColor(this.normalColor());
+        this.drawText(state.name, nameX, y, this.contentsWidth() - nameX);
+        this.resetFontSettings();
+    };
+
+    Window_Preview.prototype.drawStateTrigger = function(offset, x, y, size) {
+        var bitmap = ImageManager.loadSystem("trigger-32");
+        if (!bitmap.isReady()) {
+            if (!bitmap._itbRedrawRegistered) {
+                bitmap._itbRedrawRegistered = true;
+                bitmap.addLoadListener(function() {
+                    this.refresh();
+                }.bind(this));
+            }
+            return;
+        }
+        this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x, y, size, size);
+        this.contents.fontSize = 14;
+        this.changeTextColor("#F7E839");
+        this.drawText(String(offset), x, y + 1, size, "center");
+        this.resetFontSettings();
     };
 
     //--------------------------------------------------------------------------

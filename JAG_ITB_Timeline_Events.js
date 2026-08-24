@@ -577,7 +577,7 @@
             if (!event) return null;
             return {
                 stateId: event.stateId,
-                initiative: event.triggrInitiative,
+                initiative: event.triggerInitiative,
                 battler: this,
                 event: event
             };

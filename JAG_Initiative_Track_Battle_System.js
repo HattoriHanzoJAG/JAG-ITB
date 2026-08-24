@@ -30,14 +30,13 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     var JAG_DM_isDatabaseLoaded = DataManager.isDatabaseLoaded;
     DataManager.isDatabaseLoaded = function() {
-	if (!JAG_DM_isDatabaseLoaded.call(this)) return false;
-	if (!this._initiativeNotetagsLoaded) {
-	    this.processInitiativeNotetag($dataSkills);
-	    this.processInitiativeNotetag($dataItems);
-	    this._initiativeNotetagsLoaded = true;
-	}
-
-	return true;
+        if (!JAG_DM_isDatabaseLoaded.call(this)) return false;
+        if (!this._initiativeNotetagsLoaded) {
+            this.processInitiativeNotetag($dataSkills);
+            this.processInitiativeNotetag($dataItems);
+            this._initiativeNotetagsLoaded = true;
+        }
+        return true;
     };
 
     DataManager.processInitiativeNotetag = function(group) {
@@ -47,9 +46,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             if (!obj) continue;
             obj.initiative = 30;
             var match = regex.exec(obj.note);
-            if (match) {
-            obj.initiative = Number(match[1]);
-            }
+            if (match) obj.initiative = Number(match[1]);
         }
     };
 
@@ -400,6 +397,11 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         this._timelineVersion++;
     };
 
+    BattleManager.actionHasSingleTarget = function(item) {
+        if (!item) return false;
+        return [1, 7, 9, 11].indexOf(item.scope) >= 0;
+    };
+
     Scene_Battle.prototype.commandAttack = function() {
         if (TRACE_ITB || DEBUG_ITB) console.log("COMMAND ATTACK");
         var actor = BattleManager.actor();
@@ -421,7 +423,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     Scene_Battle.prototype.onSelectAction = function() {
         var actor = BattleManager.actor();
         var action = BattleManager.inputtingAction();
-        console.log("On select action", action);
+        if (TRACE_ITB || DEBUG_ITB) console.log("On select action", action);
         if (actor && action && action.item()) {
             console.log("Timeline refresh for", actor);
             actor.setITBActionPreview(action);
@@ -759,6 +761,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         var action = this._battler.itbActionPreview();
         if (!action) action = this._battler.currentAction();
         if (!action) return null;
+        if (!BattleManager.actionHasSingleTarget(action.item())) return null;
         if (this._battler.isActor()) {
             var targetIndex = action._targetIndex;
             if (targetIndex === undefined || targetIndex === null || targetIndex < 0) return null;
@@ -774,71 +777,31 @@ window.Window_CTBTimeline = Window_CTBTimeline;
         }
         var targets = action.makeTargets();
         if (!targets || targets.length === 0) return null;
-        var target = targets[0];
+        //var target = targets[0];
         //if (target === this._battler) return null;
-        return target;
+        return targets[0];
     };
 
     Window_CTBActionIcon.prototype.drawTargetBackground = function() {
-        var target = this.targetBattler();
-        if (!target) return;
-        var bitmap = ImageManager.loadSystem("TargetBoard");
-        if (!bitmap.isReady()) {
-            bitmap.addLoadListener(function() {
-                this._redraw = true;
-            }.bind(this));
-            return;
-        }
         var size = 54;
         var x = this.contents.width - 3*size/4 - 1;
         var y = this.iconHeight() - 3*size/4 - 3;
-        this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x, y, size, size);
+        var redrawCallback = function() {this._redraw = true}.bind(this);
+        this.drawTargetBackgroundAt(this.targetBattler(), x, y, size, redrawCallback);
     };
 
     Window_CTBActionIcon.prototype.drawTargetMiniIcon = function() {
         var target = this.targetBattler();
         if (!target) return;
-        var size = 20;
-        var dx = this.contents.width - size - 4;
-        var dy = this.iconHeight() - size - 3;
-        var bitmap;
+        var x = this.contents.width - 24;
+        var y = this.iconHeight() - 23;
+        var redrawCallback = function() {this._redraw = true}.bind(this);
         if (target.isActor()) {
-            bitmap = ImageManager.loadFace(target.faceName());
-            //console.log("Bitmap:", bitmap);
-            //console.log("Bitmap.isReady:", bitmap.isReady);
-            if (!bitmap.isReady()) return;
-            var faceIndex = target.faceIndex();
-            var pw = Window_Base._faceWidth;
-            var ph = Window_Base._faceHeight;
-            var sx = (faceIndex % 4) * pw;
-            var sy = Math.floor(faceIndex / 4) * ph;
-            this.contents.blt(bitmap, sx, sy, pw, ph, dx, dy, size, size);
-        } else {
-            var sw;
-            var sh;
-            if ($gameSystem.isSideView()) {
-                bitmap = ImageManager.loadSvEnemy(target.battlerName());
-                sw = bitmap.width;
-                sh = bitmap.height;
-                //sw = bitmap.width / 9;
-                //sh = bitmap.height / 6;
-            } else {
-                bitmap = ImageManager.loadEnemy(
-                    target.battlerName(),
-                    target.battlerHue()
-                );
-                //bitmap = ImageManager.loadPicture(
-                //    "img/enemies/" + target.name()
-                //);
-                sw = bitmap.width;
-                sh = bitmap.height;
-            }
-            if (!bitmap.isReady()) return;
-            var dw = this.contents.width/2 - 2;
-            var dh = sh * dw / Math.max(sw, 1);
-            //var dh = this.contents.height/2 - 2;
-            this.contents.blt(bitmap, 0, 0, sw, sh, dx, dy - 3, dw, dh);
+            this.drawTargetMiniIconAt(target, x, y, 20, redrawCallback);
+            return;
         }
+        var dw = this.contents.width / 2 - 2;
+        this.drawTargetMiniIconAt(target, x, y - 3, dw, redrawCallback);
     };
 
     Window_CTBActionIcon.prototype.drawPreviewArrow = function(color) {
@@ -876,6 +839,68 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBActionIcon.prototype.iconHeight = function() {
         return this.iconWidth();
+    };
+
+    Window_Base.prototype.drawTargetBackgroundAt = function(target, x, y, size, redrawCallback) {
+        if (!target) return;
+        var bitmap = ImageManager.loadSystem("TargetBoard");
+        if (!bitmap.isReady()) {
+            if (redrawCallback) {
+                bitmap.addLoadListener(redrawCallback);
+            }
+            return;
+            //bitmap.addLoadListener(function() {
+            //    this._redraw = true;
+            //}.bind(this));
+            //return;
+        }
+        this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x, y, size, size);
+    };
+
+    Window_Base.prototype.drawTargetMiniIconAt = function(target, x, y, size, redrawCallback) {
+        if (!target) return;
+        var bitmap;
+        if (target.isActor()) {
+            bitmap = ImageManager.loadFace(target.faceName());
+            if (!bitmap.isReady()) {
+                if (redrawCallback) {
+                    bitmap.addLoadListener(redrawCallback);
+                }
+                return;
+            }
+            var faceIndex = target.faceIndex();
+            var pw = Window_Base._faceWidth;
+            var ph = Window_Base._faceHeight;
+            var sx = (faceIndex % 4) * pw;
+            var sy = Math.floor(faceIndex / 4) * ph;
+            this.contents.blt(bitmap, sx, sy, pw, ph, x, y, size, size);
+        } else {
+            var sw;
+            var sh;
+            if ($gameSystem.isSideView()) {
+                bitmap = ImageManager.loadSvEnemy(target.battlerName());
+                sw = bitmap.width;
+                sh = bitmap.height;
+                //sw = bitmap.width / 9;
+                //sh = bitmap.height / 6;
+            } else {
+                bitmap = ImageManager.loadEnemy(
+                    target.battlerName(),
+                    target.battlerHue()
+                );
+                sw = bitmap.width;
+                sh = bitmap.height;
+            }
+            if (!bitmap.isReady()) {
+                if (redrawCallback) {
+                    bitmap.addLoadListener(redrawCallback);
+                }
+                return;
+            }
+            var dw = size; //this.contents.width/2 - 2;
+            var dh = sh * dw / Math.max(sw, 1);
+            this.contents.blt(bitmap, 0, 0, sw, sh, x, y, dw, dh);
+        }
     };
 
     Game_Battler.prototype.ctbActionIcon = function() {
@@ -1271,7 +1296,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     };
 
     BattleManager.addTimelineExtensionEntries = function(entries, battler) {
-        // Extension hook for timeline entries (see e.g. JAG_ITB_TimelineEvents pluging).
+        // Extension hook for timeline entries (see e.g. JAG_ITB_TimelineEvents pluggin).
     };
 
     BattleManager.sortBattleMembers = function() {
