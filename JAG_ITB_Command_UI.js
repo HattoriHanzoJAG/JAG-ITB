@@ -10,6 +10,26 @@
 (function() {
 
     //==========================================================================
+    // Game System
+    //==========================================================================
+
+    var ITB_Command_GS_initialize = Game_System.prototype.initialize;
+    Game_System.prototype.initialize = function() {
+        ITB_Command_GS_initialize.call(this);
+        // Preview window visibility preference.
+        this._itbPreviewVisible = true;
+    };
+
+    Game_System.prototype.isITBPreviewVisible = function() {
+        return this._itbPreviewVisible !== false;
+    };
+
+    Game_System.prototype.toggleITBPreviewVisible = function() {
+        this._itbPreviewVisible = !this.isITBPreviewVisible();
+        return this._itbPreviewVisible;
+    };
+
+    //==========================================================================
     // BattleManager.ITB_UI
     //==========================================================================
 
@@ -56,7 +76,8 @@
             { id: "skill", iconIndex: 191 },
             { id: "item", iconIndex: 176 },
             { id: "undo", iconIndex: 75 },
-            { id: "finish", iconIndex: 87 }
+            { id: "finish", iconIndex: 87 },
+            { id: "preview", iconIndex: 245 }
         ];
     };
 
@@ -778,6 +799,9 @@
                 case "finish":
                     this.executeFinishCommand();
                     return;
+                case "preview":
+                    this.togglePreviewWindow();
+                    break;
                 }
             }	
         }
@@ -1334,6 +1358,17 @@
     };
 
     //--------------------------------------------------------------------------
+    // Preview toggle wrapper
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.togglePreviewWindow = function() {
+        var visible = $gameSystem.toggleITBPreviewVisible();
+        var scene = SceneManager._scene;
+        if (!scene) return;
+        scene.setPreviewWindowVisible(visible);
+    };
+
+    //--------------------------------------------------------------------------
     // Keep selection valid after switching mode
     //--------------------------------------------------------------------------
 
@@ -1417,6 +1452,14 @@
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.updatePreviewWindow = function(sprite) {
+        // var visible = $gameSystem.isITBPreviewVisible();
+        // if (this._previewWindow) {
+        //     this._previewWindow.visible = visible;
+        //     if (this._previewWindow._typeWindow) {
+        //         this._previewWindow._typeWindow.visible = visible;
+        //     }
+        // }
+        // if (!visible) return;
         var scene = SceneManager._scene;
         if (!scene) return;
         if (sprite && sprite._uiData.region === "actions") {
@@ -2433,7 +2476,14 @@
         if (this._item && this._item.selfState) lines += 1;
         if (this._item && this._item.effects) {
             this._item.effects.forEach(function(effect) {
-                if (effect.code === Game_Action.EFFECT_ADD_STATE) lines += 1;
+                if (
+                    effect.code !== Game_Action.EFFECT_ADD_STATE &&
+                    effect.code !== Game_Action.EFFECT_REMOVE_STATE
+                ) {
+                    return;
+                }
+                var state = $dataStates[effect.dataId];
+                if (state && state.name && state.iconIndex) lines += 1;
             });
         }
         return lines;
@@ -2618,12 +2668,20 @@
         }
         // Database Add State effects
         this._item.effects.forEach(function(effect) {
-            if (effect.code !== Game_Action.EFFECT_ADD_STATE) return;
+            if (
+                effect.code !== Game_Action.EFFECT_ADD_STATE &&
+                effect.code !== Game_Action.EFFECT_REMOVE_STATE
+            ) {
+                return;
+            }
+            var state = $dataStates[effect.dataId];
+            if (!state || !state.name || !state.iconIndex) return;
             targetStates.push({
                 stateId: effect.dataId,
-                offset: 0
+                offset: 0,
+                remove: effect.code === Game_Action.EFFECT_REMOVE_STATE
             });
-        });
+        }, this);
         var x = this.separatorX() + this.separatorMargin();
         var rowHeight = this.lineHeight();
         var labelWidth = 75;
@@ -2656,6 +2714,11 @@
         if (!state) return;
         var iconSize = 28;
         var spacing = 8;
+        // Remove-state marker
+        if (stateData.remove) {
+            this.drawSystemImage("cross-mark-24", x, y + 6, 24);
+            x += 28;
+        }
         // State icon
         this.drawScaledIcon(state.iconIndex, x, y + 4, iconSize);
         var nameX = x + iconSize + spacing;
@@ -3818,11 +3881,44 @@
         if (!actionData) {
             this._previewWindow.clear();
             this._previewWindow.hide();
+            if (this._previewWindow._typeWindow) {
+                this._previewWindow._typeWindow.hide();
+            }
             return;
         }
         var item = BattleManager.ITB_UI.databaseAction(actionData);
         this._previewWindow.setAction(actor, item, actionData);
-        this._previewWindow.show();
+        if ($gameSystem.isITBPreviewVisible()) {
+            this._previewWindow.show();
+            if (this._previewWindow._typeWindow) {
+                this._previewWindow._typeWindow.show();
+            }
+        } else {
+            this._previewWindow.hide();
+            if (this._previewWindow._typeWindow) {
+                this._previewWindow._typeWindow.hide();
+            }
+        }
+        //this._previewWindow.show();
+    };
+
+    //--------------------------------------------------------------------------
+    // Control Preview Window Visibility
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.setPreviewWindowVisible = function(visible) {
+        if (!this._previewWindow) return;
+        if (visible) {
+            this._previewWindow.show();
+            if (this._previewWindow._typeWindow) {
+                this._previewWindow._typeWindow.show();
+            }
+        } else {
+            this._previewWindow.hide();
+            if (this._previewWindow._typeWindow) {
+                this._previewWindow._typeWindow.hide();
+            }
+        }
     };
 
     //--------------------------------------------------------------------------
