@@ -1490,6 +1490,7 @@
         }
         Window_Selectable.prototype.initialize.call(this, x, y, width, height);
         //this.createActiveActorHighlight();
+        this.clearDisplayedActor();
         this.refresh();
         this.openness = 0;
     };
@@ -1518,8 +1519,26 @@
         // Refresh active actor displayed
         var actor = BattleManager.actor();
         if (!actor) return;
+        this.clearDisplayedActor();
+        this.select(actor.index());
         this.setTopRow(actor.index());
         this.refresh();
+    };
+
+    //--------------------------------------------------------------------------
+    // Refresh displayed actor helpers
+    //--------------------------------------------------------------------------
+
+    Window_BattleStatus.prototype.setDisplayedActor = function(actor) {
+        if (!actor) return;
+        this._displayedActor = actor;
+        this.select(actor.index());
+        this.setTopRow(actor.index());
+        this.refresh();
+    };
+
+    Window_BattleStatus.prototype.clearDisplayedActor = function() {
+        this._displayedActor = null;
     };
 
     //--------------------------------------------------------------------------
@@ -1569,11 +1588,15 @@
 
     /* var ITB_Command_WBS_drawItem = Window_BattleStatus.prototype.drawItem;
     Window_BattleStatus.prototype.drawItem = function(index) {
-        ITB_Command_WBS_drawItem.call(this, index);
-        var actor = BattleManager.actor();
-        if (!actor) return;
-        if (actor.index() !== index) return;
-        this.drawActiveActorIndicator(index);
+        if (!this._displayedActor) {
+            ITB_Command_WBS_drawItem.call(this, index);
+            return;
+        }
+        var actor = this._displayedActor;
+        this.drawBasicArea(this.basicAreaRect(index), actor);
+        this.drawGaugeArea(this.gaugeAreaRect(index), actor);
+        //if (actor.index() !== index) return;
+        //this.drawActiveActorIndicator(index);
     }; */
 
     /* Window_BattleStatus.prototype.drawActiveActorIndicator = function(index) {
@@ -1706,6 +1729,287 @@
     };
 
     //==========================================================================
+    // Window_ITBActorPortraits
+    //==========================================================================
+
+    function Window_ITBActorPortraits() {
+        this.initialize.apply(this, arguments);
+    }
+
+    Window_ITBActorPortraits.prototype = Object.create(Window_Base.prototype);
+    Window_ITBActorPortraits.prototype.constructor = Window_ITBActorPortraits;
+
+    function Sprite_ITBActorPortrait() {
+        this.initialize.apply(this, arguments);
+    }
+
+    Sprite_ITBActorPortrait.prototype = Object.create(Sprite.prototype);
+    Sprite_ITBActorPortrait.prototype.constructor = Sprite_ITBActorPortrait;
+
+    //--------------------------------------------------------------------------
+    // Initialization
+    //--------------------------------------------------------------------------
+
+    Window_ITBActorPortraits.prototype.initialize = function(statusWindow) {
+        this._statusWindow = statusWindow;
+        var width = this.windowWidth();
+        var height = this.windowHeight();
+        var x = this.windowX();
+        var y = this.windowY();
+        Window_Base.prototype.initialize.call(this, x, y, width, height);
+        this._portraits = [];
+        this.createPortraits();
+        //this.refresh();
+    };
+
+    Sprite_ITBActorPortrait.prototype.initialize = function(actor, window) {
+        Sprite.prototype.initialize.call(this);
+        this._actor = actor;
+        this._window = window;
+        //this._width = window.portraitWidth();
+        //this._height = window.portraitHeight();
+        this._portrait = null;
+        this._hpGauge = null;
+        this._mpGauge = null;
+        this.createPortrait();
+        this.createGauges();
+        this.refreshHpGauge();
+        this.refreshMpGauge();
+    };
+
+    //--------------------------------------------------------------------------
+    // Dimensions
+    //--------------------------------------------------------------------------
+
+    Window_ITBActorPortraits.prototype.windowWidth = function() {
+        return this.portraitWidth(); // + this.standardPadding() * 2;
+    };
+
+    Window_ITBActorPortraits.prototype.windowHeight = function() {
+        var members = $gameParty.battleMembers();
+        var rows = members.length;
+        return rows * this.portraitHeight(); // + this.standardPadding() * 2;
+    };
+
+    Window_ITBActorPortraits.prototype.windowX = function() {
+        return Graphics.boxWidth - this.windowWidth();
+    };
+
+    Window_ITBActorPortraits.prototype.windowY = function() {
+        var scene = SceneManager._scene;
+        var statusWindow = scene && scene._statusWindow;
+        if (statusWindow) return statusWindow.y - this.windowHeight();
+        return 0;
+    };
+
+    Window_ITBActorPortraits.prototype.portraitWidth = function() {
+        return 84;
+    };
+
+    Window_ITBActorPortraits.prototype.portraitHeight = function() {
+        return 84;
+    };
+
+    Sprite_ITBActorPortrait.prototype.portraitWidth = function() {
+        return this._window.portraitWidth();
+    };
+
+    Sprite_ITBActorPortrait.prototype.portraitHeight = function() {
+        return this._window.portraitHeight();
+    };
+
+    Sprite_ITBActorPortrait.prototype.gaugeHeight = function() {
+        return 4;
+    };
+
+    //--------------------------------------------------------------------------
+    // Layout
+    //--------------------------------------------------------------------------
+
+    Window_ITBActorPortraits.prototype.updateLayout = function() {
+        var statusWindow = SceneManager._scene._statusWindow;
+        if (!statusWindow) return;
+        this.x = Graphics.boxWidth - this.width;
+        this.y = statusWindow.y - this.height;
+    };
+
+    Window_ITBActorPortraits.prototype.layoutPortraits = function() {
+        for (var i = 0; i < this._portraits.length; i++) {
+            var portrait = this._portraits[i];
+            portrait.x = 4;
+            portrait.y = 4 + i * (this.portraitHeight() - 5);
+            //portrait.scale.x = 0.5;
+            //portrait.scale.y = 0.5;
+        }
+    };
+
+    Sprite_ITBActorPortrait.prototype.layoutGauges = function() {
+        this._hpGauge.x = 0;
+        this._hpGauge.y = this.portraitHeight() - 15;
+        this._mpGauge.x = 0;
+        this._mpGauge.y = this.portraitHeight() + this.gaugeHeight() - 15;
+    };
+
+    //--------------------------------------------------------------------------
+    // Update loop
+    //--------------------------------------------------------------------------
+
+    Window_ITBActorPortraits.prototype.update = function() {
+        Window_Base.prototype.update.call(this);
+        this.updateLayout();
+        this.processTouch();
+        for (var i = 0; i < this._portraits.length; i++) {
+            this._portraits[i].update();
+        }
+    };
+
+    Sprite_ITBActorPortrait.prototype.update = function() {
+        Sprite.prototype.update.call(this);
+        this.updatePortrait();
+        if (this._actor) {
+            if (this._lastHp !== this._actor.hp) {
+                this._lastHp = this._actor.hp;
+                this.refreshHpGauge();
+            }
+            if (this._lastMp !== this._actor.mp) {
+                this._lastMp = this._actor.mp;
+                this.refreshMpGauge();
+            }
+        }
+    };
+
+    Sprite_ITBActorPortrait.prototype.updatePortrait = function() {
+        if (!this._portrait || !this._portrait.bitmap) return;
+        if (!this._portrait.bitmap.isReady()) return;
+        if (this._portrait._itbFrameSet) return;
+        var index = this._actor.faceIndex();
+        this._portrait.setFrame(
+            index % 4 * Window_Base._faceWidth,
+            Math.floor(index / 4) * Window_Base._faceHeight,
+            Window_Base._faceWidth,
+            Window_Base._faceHeight
+        );
+        this._portrait._itbFrameSet = true;
+    };
+
+    //--------------------------------------------------------------------------
+    // Create portrait sprites
+    //--------------------------------------------------------------------------
+
+    Window_ITBActorPortraits.prototype.createPortraits = function() {
+        var members = $gameParty.battleMembers();
+        for (var i = 0; i < members.length; i++) {
+            var portrait = new Sprite_ITBActorPortrait(
+                members[i],
+                this
+            );
+            this._portraits.push(portrait);
+            this.addChild(portrait);
+        }
+        this.layoutPortraits();
+    };
+
+    Sprite_ITBActorPortrait.prototype.createPortrait = function() {
+        if (!this._actor) return;
+        this._portrait = new Sprite();
+        this._portrait.bitmap = ImageManager.loadFace(this._actor.faceName());
+        var index = this._actor.faceIndex();
+        this._portrait.setFrame(
+            index % 4 * Window_Base._faceWidth,
+            Math.floor(index / 4) * Window_Base._faceHeight,
+            Window_Base._faceWidth,
+            Window_Base._faceHeight
+        );
+        this._portrait.scale.x = 0.52;
+        this._portrait.scale.y = 0.52;
+        this.addChild(this._portrait);
+    };
+
+    //--------------------------------------------------------------------------
+    // Add gauges to portraits
+    //--------------------------------------------------------------------------
+
+    Sprite_ITBActorPortrait.prototype.createGauges = function() {
+        this.createHpGauge();
+        this.createMpGauge();
+        this.layoutGauges();
+    };
+
+    Sprite_ITBActorPortrait.prototype.createHpGauge = function() {
+        this._hpGauge = new Sprite(
+            new Bitmap(this.portraitWidth(), this.gaugeHeight())
+        );
+        this.addChild(this._hpGauge);
+    };
+
+    Sprite_ITBActorPortrait.prototype.createMpGauge = function() {
+        this._mpGauge = new Sprite(
+            new Bitmap(this.portraitWidth(), this.gaugeHeight())
+        );
+        this.addChild(this._mpGauge);
+    };
+
+    //--------------------------------------------------------------------------
+    // Draw gauges
+    //--------------------------------------------------------------------------
+
+    Sprite_ITBActorPortrait.prototype.refreshHpGauge = function() {
+        var bitmap = this._hpGauge.bitmap;
+        var width = bitmap.width - 8;
+        var height = bitmap.height;
+        var window = this._window;
+        bitmap.clear();
+        var rate = this._actor.mhp > 0 ? this._actor.hp / this._actor.mhp : 0;
+        bitmap.fillRect(0, 0, width, height, window.gaugeBackColor());
+        bitmap.gradientFillRect(
+            0,
+            0,
+            Math.floor(width * rate),
+            height,
+            window.hpGaugeColor1(),
+            window.hpGaugeColor2()
+        );
+    };
+
+    Sprite_ITBActorPortrait.prototype.refreshMpGauge = function() {
+        var bitmap = this._mpGauge.bitmap;
+        var width = bitmap.width - 8;
+        var height = bitmap.height;
+        var window = this._window;
+        bitmap.clear();
+        var rate = this._actor.mmp > 0 ? this._actor.mp / this._actor.mmp : 0;
+        bitmap.fillRect(0, 0, width, height, window.gaugeBackColor());
+        bitmap.gradientFillRect(
+            0,
+            0,
+            Math.floor(width * rate),
+            height,
+            window.mpGaugeColor1(),
+            window.mpGaugeColor2()
+        );
+    };
+
+    //--------------------------------------------------------------------------
+    // Detect mouse clicks
+    //--------------------------------------------------------------------------
+
+    Window_ITBActorPortraits.prototype.processTouch = function() {
+        if (!TouchInput.isTriggered()) return false;
+        var x = TouchInput.x - this.x;
+        var y = TouchInput.y - this.y;
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) return false;
+        var row = Math.floor(y / this.portraitHeight());
+        var members = $gameParty.battleMembers();
+        if (row < 0 || row >= members.length) return false;
+        var actor = members[row];
+        var scene = SceneManager._scene;
+        if (scene && scene.selectITBDisplayedActor) {
+            scene.selectITBDisplayedActor(actor);
+        }
+        return true;
+    };
+
+    //==========================================================================
     // Window_Preview
     //==========================================================================
 
@@ -1732,13 +2036,18 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.initialize = function(numLines) {
-        var width = Graphics.boxWidth;
         var height = this.fittingHeight(numLines || 4);
         var x = 0;
         var scene = SceneManager._scene;
-        if (scene && scene._statusWindow) {
-            var y = scene._statusWindow.y - height - 10;
+        if (scene) {
+            var width = scene.previewWindowWidth();
+            if (scene._statusWindow) {
+                var y = scene._statusWindow.y - height - 10;
+            } else {
+                var y = 0;
+            }
         } else {
+            var width = Graphics.boxWidth;
             var y = 0;
         }
         Window_Base.prototype.initialize.call(this, x, y, width, height);
@@ -3809,6 +4118,18 @@
         ITB_SB_selectActorSelection.call(this);
     };
 
+    Scene_Battle.prototype.selectITBDisplayedActor = function(actor) {
+        if (!actor || !this._statusWindow) return;
+        this._statusWindow.setDisplayedActor(actor);
+        //this._statusWindow.activate();
+    };
+
+    //Scene_Battle.prototype.resetITBDisplayedActor = function() {
+    //    if (!this._statusWindow) return;
+    //    this._statusWindow.clearDisplayedActor();
+    //    this._statusWindow.refreshActiveActor();
+    //};
+
     //--------------------------------------------------------------------------
     // Create actor window
     //--------------------------------------------------------------------------
@@ -3847,9 +4168,33 @@
 
     Scene_Battle.prototype.syncStatusWindowToActiveActor = function() {
         if (!this._statusWindow) return;
-        var actor = BattleManager.actor();
-        if (!actor) return;
-        this._statusWindow.setTopRow(actor.index());
+        this._statusWindow.refreshActiveActor();
+        //this.resetITBDisplayedActor()
+        //var actor = BattleManager.actor();
+        //if (!actor) return;
+        //this._statusWindow.select(actor.index());
+        //this._statusWindow.setTopRow(actor.index());
+        //this._statusWindow.refresh();
+    };
+
+    //--------------------------------------------------------------------------
+    // Create All Windows
+    //--------------------------------------------------------------------------
+
+    ITB_Command_SB_createAllWindows = Scene_Battle.prototype.createAllWindows;
+    Scene_Battle.prototype.createAllWindows = function() {
+        ITB_Command_SB_createAllWindows.call(this);
+        this.createITBActorPortraits();
+        this.createPreviewWindow();
+    };
+
+    //--------------------------------------------------------------------------
+    // Create Actor Portraits Window 
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.createITBActorPortraits = function() {
+        this._itbActorPortraitWindow = new Window_ITBActorPortraits(this._statusWindow);
+        this.addWindow(this._itbActorPortraitWindow);
     };
 
     //--------------------------------------------------------------------------
@@ -3859,16 +4204,18 @@
     Scene_Battle.prototype.createPreviewWindow = function() {
         var wx = 0;
         var wy = this._statusWindow.y;
-        var ww = Graphics.boxWidth;
+        var ww = this.previewWindowWidth();
         var wh = Graphics.boxHeight - wy;
         this._previewWindow = new Window_Preview(wx, wy, ww, wh);
         this.addWindow(this._previewWindow);
     };
 
-    ITB_Command_SB_createAllWindows = Scene_Battle.prototype.createAllWindows;
-    Scene_Battle.prototype.createAllWindows = function() {
-        ITB_Command_SB_createAllWindows.call(this);
-        this.createPreviewWindow();
+    Scene_Battle.prototype.previewWindowWidth = function() {
+        var portraitWindow = this._itbActorPortraitWindow;
+        if (!portraitWindow) {
+            return Graphics.boxWidth;
+        }
+        return portraitWindow.x;
     };
 
     //--------------------------------------------------------------------------
