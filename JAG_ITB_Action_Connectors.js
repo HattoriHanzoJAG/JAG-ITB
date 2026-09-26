@@ -58,16 +58,14 @@
     //=============================================================================
 
     DataManager.processBattlerConnectorNotetags = function(group) {
-        var note1 = /<Distance:\s*(\-?\d+)>/i;
+        var note1 = /<Manoeuvre:\s*(\-?\d+)>/i;
         var note2 = /<Combat:\s*(\-?\d+)>/i;
         var note3 = /<Sorcery:\s*(\-?\d+)>/i;
         var note4 = /<Diplomacy:\s*(\-?\d+)>/i;
         var note5 = /<Deception:\s*(\-?\d+)>/i;
-        var note6 = /<Manoeuvre:\s*(\-?\d+)>/i;
         for (var n = 1; n < group.length; n++) {
             var obj = group[n];
             if (!obj) continue;
-            obj.distance = undefined;
             obj.combat = undefined;
             obj.sorcery = undefined;
             obj.diplomacy = undefined;
@@ -77,7 +75,7 @@
             for (var i = 0; i < notedata.length; i++) {
                 var line = notedata[i];
                 if (line.match(note1)) {
-                    obj.distance = parseInt(RegExp.$1);
+                    obj.manoeuvre = parseInt(RegExp.$1);
                 }
                 if (line.match(note2)) {
                     obj.combat = parseInt(RegExp.$1);
@@ -90,9 +88,6 @@
                 }
                 if (line.match(note5)) {
                     obj.deception = parseInt(RegExp.$1);
-                }
-                if (line.match(note6)) {
-                    obj.manoeuvre = parseInt(RegExp.$1);
                 }
             }
         }
@@ -237,6 +232,67 @@
     };
 
     //=============================================================================
+    // Connector Definitions
+    //=============================================================================
+
+    DataManager.connectorDefinitions = function() {
+        return [
+            {
+                discipline: "combat",
+                disciplineName: "Combat",
+                connector: "offense",
+                connectorName: "Offense",
+                attributeName: "Ferocity"
+            },
+            {
+                discipline: "diplomacy",
+                disciplineName: "Diplomacy",
+                connector: "hostility",
+                connectorName: "Hostility",
+                attributeName: "Conviction"
+            },
+            {
+                discipline: "deception",
+                disciplineName: "Deception",
+                connector: "concealment",
+                connectorName: "Concealment",
+                attributeName: "Guile"
+            },
+            {
+                discipline: "sorcery",
+                disciplineName: "Sorcery",
+                connector: "expressiveness",
+                connectorName: "Expressiveness",
+                attributeName: "Spirituality"
+            },
+            {
+                discipline: "manoeuvre",
+                disciplineName: "Manoeuvre",
+                connector: "distance",
+                connectorName: "Distance",
+                attributeName: "Vision"
+            }
+        ];
+    };
+
+    DataManager.getConnectorDefinition = function(key) {
+        var definitions = this.connectorDefinitions();
+        key = String(key).toLowerCase();
+        for (var i = 0; i < definitions.length; i++) {
+            if (definitions[i].discipline === key) {
+                return definitions[i];
+            }
+        }
+        return null;
+    };
+
+    DataManager.getDisciplines = function() {
+        return this.connectorDefinitions().map(function(definition) {
+            return definition.discipline;
+        });
+    };
+
+    //=============================================================================
     // BattleManager Extensions
     //=============================================================================
 
@@ -249,6 +305,16 @@
         return JsonEx.makeDeepCopy(last.resultState);
     }; */
 
+    /* BattleManager.connectorNames = function() {
+        return [
+            "combat",
+            "sorcery",
+            "deception",
+            "diplomacy",
+            "distance"
+        ];
+    };  
+ */
     BattleManager.connectorValidationState = function(actor) {
         // Combo continuation
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("CONNECTOR VALIDATION STATE");
@@ -327,15 +393,15 @@
     * Example:
     *
     * Target:
-    *   distance = 1
+    *   manoeuvre = 1
     *   combat = 2
     *
     * Rules:
-    *   distance = strict
+    *   manoeuvre = strict
     *   combat = lax
     *
     * Skill:
-    *   <Input Distance>
+    *   <Input Manoeuvre>
     *
     * Result:
     *   Valid
@@ -344,18 +410,8 @@
     *   <Input Combat>
     *
     * Result:
-    *   Invalid (missing strict distance connector)
+    *   Invalid (missing strict manoeuvre connector)
     */
-
-    Game_Battler.prototype.connectorNames = function() {
-        return [
-            "combat",
-            "sorcery",
-            "deception",
-            "diplomacy",
-            "distance"
-        ];
-    };  
 
     Connector_GB_initMembers = Game_Battler.prototype.initMembers;
     Game_Battler.prototype.initMembers = function() {
@@ -413,7 +469,7 @@
 
     Game_Battler.prototype.initConnectorRules = function() {
         this._connectorRules = {
-            distance: "strict",
+            manoeuvre: "strict",
             deception: "strict",
             combat: "lax",
             diplomacy: "lax",
@@ -484,9 +540,6 @@
         Connector_GameEnemy_setup.call(this, enemyId, x, y);
         this._connectorRules = JsonEx.makeDeepCopy(this._connectorRules || {});
         var data = this.enemy();
-        if (data.distance !== undefined) {
-            this._connectors.distance = data.distance;
-        }
         if (data.combat !== undefined) {
             this._connectors.combat = data.combat;
         }
@@ -519,10 +572,6 @@
         if (!this._connectors) this._connectors = {};
         this._connectorRules = JsonEx.makeDeepCopy(this._connectorRules || {});
         var data = this.actor();
-        if (this._connectors.distance === undefined &&
-            data.distance !== undefined) {
-            this._connectors.distance = data.distance;
-        }
         if (this._connectors.combat === undefined && 
             data.combat !== undefined) {
             this._connectors.combat = data.combat;
@@ -931,7 +980,6 @@
         $gameTroop.members().forEach(function(enemy) {
             enemy.deselect();
         });
-        console.log("Actor Command Window Active?:", this._actorCommandWindow.active);
         Connector_SB_finishActionQueue.call(this);
     };
 
