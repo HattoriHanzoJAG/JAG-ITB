@@ -323,7 +323,7 @@
             console.log("preview target:", actor._connectorPreviewTarget);
         }
         if (!actor) return null;
-        var last = actor.lastQueuedActionData();
+        var last = actor.lastQueuedAction();
         if (last && last.resultState) {
             return JsonEx.makeDeepCopy(last.resultState);
         }
@@ -334,7 +334,7 @@
         return null;
     };
 
-    var Connector_BM_selectNextCommand = BattleManager.selectNextCommand;
+    /* var Connector_BM_selectNextCommand = BattleManager.selectNextCommand;
     BattleManager.selectNextCommand = function() {
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
             console.log("=== SELECT NEXT COMMAND ===");
@@ -377,6 +377,18 @@
         // NORMAL FLOW
         // -------------------------------------------------
         Connector_BM_selectNextCommand.call(this);
+    }; */
+
+    BattleManager.isConnectorActionScopeCompatible = function(actor, action, target) {
+        console.log("Is connector action scope compatible?");
+        console.log("Actor", actor);
+        console.log("Action", action);
+        console.log("Target", target);
+        if (!actor || !action || !target) return true;
+        if (action.isForUser()) return target === actor;
+        if (target.isEnemy()) return action.isForOpponent();
+        if (target.isActor()) return action.isForFriend();
+        return false;
     };
 
     //=============================================================================
@@ -524,11 +536,6 @@
             this._lastQueuedConnectorState = null;
         }
         return removed;
-    };
-
-    Game_Battler.prototype.lastQueuedActionData = function() {
-        if (!this._actionQueue || this._actionQueue.length === 0) return null;
-        return this._actionQueue[this._actionQueue.length - 1];
     };
 
     //=============================================================================
@@ -858,9 +865,30 @@
     // Scene Battle Hooks
     //=============================================================================
 
+    var Connector_SB_onSelectAction = Scene_Battle.prototype.onSelectAction;
+    Scene_Battle.prototype.onSelectAction = function() {
+        var actor = this._actor || BattleManager.actor();
+        var action = BattleManager.inputtingAction();
+        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
+            console.log("=== CONNECTOR ON SELECT ACTION ===");
+        }
+        if (DEBUG_CONNECTORS) {
+            console.log("actor:", actor ? actor.name() : null);
+            console.log(
+                "action:",
+                action && action.item()
+                    ? action.item().name
+                    : null
+            );
+            console.log("preview target:", actor ? actor._connectorPreviewTarget : null);
+        }
+        if (this.queueConnectorActionAndReturn(actor, action)) return;
+        Connector_SB_onSelectAction.call(this);
+    };
+
     var Connector_SB_onEnemyOk = Scene_Battle.prototype.onEnemyOk;
     Scene_Battle.prototype.onEnemyOk = function() {
-        var actor = BattleManager.actor();
+        var actor = this._actor || BattleManager.actor();
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("ON ENEMY OK");
         // ----------------------------------
         // CONNECTOR TARGET PRESELECTION
@@ -870,7 +898,6 @@
             var target = this._enemyWindow.enemy()
             actor._connectorPreviewTarget = target;
             actor._connectorPreviewTargetSprite = this.CacheTargetImageExtension(target);
-            actor._queueInputActive = true;
             BattleManager._connectorTargetMode = false;
             this._enemyWindow.hide();
             this._enemyWindow.deactivate();
@@ -889,30 +916,30 @@
     var Connector_SB_onActorOk = Scene_Battle.prototype.onActorOk;
     Scene_Battle.prototype.onActorOk = function() {
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("ON ACTOR OK");
-        var actor = BattleManager.actor();
+        var actor = this._actor || BattleManager.actor();
         // ----------------------------------
         // CONNECTOR TARGET PRESELECTION
         // ----------------------------------
         if (BattleManager._connectorTargetMode) {
             if (DEBUG_CONNECTORS) console.log("Connector Target Preselection");
             actor._connectorPreviewTarget = this._actorWindow.actor();
-            actor._queueInputActive = true;
             BattleManager._connectorTargetMode = false;
             this._enemyWindow.hide();
             this._enemyWindow.deactivate();
+            this._actorWindow.hide();
+            this._actorWindow.deactivate();
             return;
         }
         Connector_SB_onActorOk.call(this);
     };
 
     Scene_Battle.prototype._queueAction = function(action, target, type) {
-        var actor = BattleManager.actor();
+        var actor = this._actor || BattleManager.actor();
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("QUEUE ACTION");
         if (DEBUG_CONNECTORS) {
             console.log(
                 "STATE",
                 {
-                    queueInput: actor ? actor._queueInputActive : null,
                     preview: actor ? !!actor._connectorPreviewTarget : null,
                     queueLength: actor ? actor.queueLength() : null,
                     phase: BattleManager._phase
@@ -923,6 +950,19 @@
         var data = action.createQueueData();
         if (!data) {
             if (DEBUG_CONNECTORS) console.warn("Queue rejected: invalid action", action);
+            return;
+        }
+        if (!BattleManager.isConnectorActionScopeCompatible(actor, action, target)) {
+            if (DEBUG_CONNECTORS) {
+                console.log(
+                    "INVALID ACTION SCOPE -> REJECTED",
+                    {
+                        action: action.item() ? action.item().name : null,
+                        target: target ? target.name() : null
+                    }
+                );
+            }
+            SoundManager.playBuzzer();
             return;
         }
         data.targetIndex = (type === "enemy")
@@ -954,13 +994,12 @@
 
     var Connector_SB_finishActionQueue = Scene_Battle.prototype.finishActionQueue;
     Scene_Battle.prototype.finishActionQueue = function() {
-        var actor = BattleManager.actor();
+        var actor = this._actor || BattleManager.actor();
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("FINISH ACTION QUEUE");
         if (DEBUG_CONNECTORS) {
             console.log(
                 "STATE",
                 {
-                    queueInput: actor ? actor._queueInputActive : null,
                     preview: actor ? !!actor._connectorPreviewTarget : null,
                     queueLength: actor ? actor.queueLength() : null,
                     phase: BattleManager._phase
@@ -976,7 +1015,6 @@
         }
         // Reset the temporary UI states to finish action queuing
         actor._connectorPreviewTarget = null;
-        actor._queueInputActive = false;
         $gameTroop.members().forEach(function(enemy) {
             enemy.deselect();
         });
@@ -994,13 +1032,12 @@
             );
             console.log(new Error().stack);
         }
+        this._actor = BattleManager.actor();
         Connector_SB_startActorCommandSelection.call(this);
-        var actor = BattleManager.actor();
         if (DEBUG_CONNECTORS) {
             console.log(
                 "STATE",
                 {
-                    queueInput: actor ? actor._queueInputActive : null,
                     preview: actor ? !!actor._connectorPreviewTarget : null,
                     queueLength: actor ? actor.queueLength() : null,
                     phase: BattleManager._phase
@@ -1008,7 +1045,8 @@
             );
         }
         console.log("Actor Command Window Active?:", this._actorCommandWindow.active);
-        if (!actor) return;
+        if (!this._actor) return;
+        var actor = this._actor;
         if (!actor._connectorPreviewTarget) {
             if (actor.queueLength() <= 0) {
                 if (DEBUG_CONNECTORS) console.log("Target preselection");
@@ -1019,48 +1057,40 @@
                 this._enemyWindow.active = true;
                 return;
             } else if (actor._queuedTarget) {
-                //if (DEBUG_CONNECTORS) console.log(JSON.stringify(actor._actionQueue, null, 2));
                 actor._connectorPreviewTarget = actor._queuedTarget;
-                actor._queueInputActive = true;
             }
         }
         if (DEBUG_CONNECTORS) {
             console.log(
                 "COMMAND_SELECTION_STATE",
                 actor.queueLength(),
-                actor._connectorPreviewTarget,
-                actor._queueInputActive
+                actor._connectorPreviewTarget
             );
         }
     };
 
     var Connector_SB_selectEnemySelection = Scene_Battle.prototype.selectEnemySelection;
     Scene_Battle.prototype.selectEnemySelection = function() {
-        var actor = BattleManager.actor();
+        var actor = this._actor || BattleManager.actor();
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("Select Enemy Selection");
         if (DEBUG_CONNECTORS) {
             console.log("Actor", !!actor);
             console.log("Queue length", actor ? actor.queueLength() : null);
             console.log("Preview target:", actor ? actor._connectorPreviewTarget : null);
         }
-        if (actor) {
-            BattleManager.selectNextCommand();
-            return;
-        }
+        if (this.queueConnectorActionAndReturn(actor, BattleManager.inputtingAction())) return;
         Connector_SB_selectEnemySelection.call(this);
     };
 
     Scene_Battle.prototype.queueConnectorAction = function(actor, action) {
         if (!actor || !action || !actor._connectorPreviewTarget) return;
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("AUTO QUEUE CONNECTOR ACTION");
-        var target = actor._connectorPreviewTarget;
+        //var target = actor._connectorPreviewTarget;
         // Inject stored target for action requiring target selection
-        if (action.needsSelection()) {
-            if (DEBUG_CONNECTORS) console.log("Store target");
-            action.setTarget(target.index());
-        }
+        //if (DEBUG_CONNECTORS) console.log("Store target");
+        //action.setTarget(target.index());
         // Build queue entry and connector result state
-        this._queueAction(action, target, action.isForOpponent() ? "enemy" : "ally");
+        this._queueAction(action, actor._connectorPreviewTarget, action.isForOpponent() ? "enemy" : "ally");
         if (DEBUG_CONNECTORS) console.log("Queue length:", actor.queueLength()); 
     };
 
@@ -1077,7 +1107,7 @@
     var Connector_BM_selectPrevious = Scene_Battle.selectPreviousCommand;
     Scene_Battle.selectPreviousCommand = function() {
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("Select Previous Command");
-        var actor = BattleManager.actor();
+        var actor = this._actor || BattleManager.actor();
         if (!actor || !actor._connectorPreviewTarget) return;
         Connector_BM_selectPrevious.call(this);
     };
@@ -1095,6 +1125,27 @@
         Connector_WS_processCancel.call(this);
     };
 
+    Scene_Battle.prototype.queueConnectorActionAndReturn = function(actor, action) {
+        if (!actor || !action || !action.item()) return false;
+        if (!actor._connectorPreviewTarget) return false;
+        if (DEBUG_CONNECTORS) {
+            console.log(
+                "CONNECTOR TARGET EXISTS -> QUEUE ACTION"
+            );
+        }
+        this.queueConnectorAction(actor, action);
+        this.returnToCommandInput();
+        return true;
+    };
+
+    Scene_Battle.prototype.commandGuard = function() {
+        var actor = this._actor || BattleManager.actor();
+        var action = BattleManager.inputtingAction();
+        action.setGuard();
+        if (this.queueConnectorActionAndReturn(actor, action)) return;
+        this.selectNextCommand();
+    };
+
     Scene_Battle.prototype.CacheTargetImageExtension = function(target) {
         // Extension hook for caching target image
         return null;
@@ -1105,6 +1156,12 @@
     //=============================================================================
 
     Window_BattleEnemy.prototype.connectorPreviewSelect = function(index) {
+        this._index = index;
+        this.ensureCursorVisible();
+        this.updateCursor();
+    };
+
+    Window_BattleActor.prototype.connectorPreviewSelect = function(index) {
         this._index = index;
         this.ensureCursorVisible();
         this.updateCursor();

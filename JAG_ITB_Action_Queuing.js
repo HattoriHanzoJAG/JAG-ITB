@@ -86,6 +86,11 @@
         return this.createActionFromQueueData(this._actionQueue[0]);
     };
 
+    Game_Battler.prototype.lastQueuedAction = function() {
+        if (!this._actionQueue || this._actionQueue.length === 0) return null;
+        return this._actionQueue[this._actionQueue.length - 1];
+    };
+
     Game_Battler.prototype.undoLastQueuedAction = function() {
         if (!this._actionQueue || this._actionQueue.length === 0) {
             return false;
@@ -151,11 +156,11 @@
         this.afterActionQueued();
     };
 
-    var AQ_SB_onActorOk = Scene_Battle.prototype.onActorOk;
+    //var AQ_SB_onActorOk = Scene_Battle.prototype.onActorOk;
     Scene_Battle.prototype.onActorOk = function() {
         var action = BattleManager.inputtingAction();
         var target = this._actorWindow.actor();
-        action.setTarget(this._actorWindow.enemyIndex());
+        action.setTarget(this._actorWindow.index());
         this._queueAction(action, target, "ally");
         this._actorWindow.hide();
         this.afterActionQueued();
@@ -219,9 +224,12 @@
                 BattleManager.inputtingAction()
             );
         }
-        BattleManager.inputtingAction().setGuard();
+        var action = BattleManager.inputtingAction();
+        action.setGuard();
         var actor = BattleManager.actor();
         if (!actor) return;
+        actor.setITBActionPreview(action);
+        BattleManager.requestTimelineRefresh("Select Guard");
         var skillId = actor.guardSkillId();
         var data = {
             skillId: skillId,
@@ -396,9 +404,10 @@
     Window_CTBActionIcon.prototype.updateBlink = function() {
         //console.log("Update blink for battler", this._battler);
         //console.log("FRAME", Graphics.frameCount);
-        //if (!this._battler) return;
+        if (!this._battler) return;
         var opacity = 255;
-        if (!this._battler || this._battler.isITBPreviewBlinking()) {
+        //if (!this._battler || this._battler.isITBPreviewBlinking()) {
+        if (this._battler.isITBPreviewBlinking()) {
             //console.log("Preview blinking", this._battler.isITBPreviewBlinking());
             opacity = Graphics.frameCount % 48 < 32 ? 255 : 0;
         }
@@ -410,6 +419,19 @@
     };
 
     Game_Battler.prototype.setITBActionPreview = function(action, blink) {
+        console.log("PREVIEW ACTION");
+        console.log(
+            "SET PREVIEW",
+            this.name(),
+            "passed:",
+            action && action.item() ? action.item().name : null,
+            "queue:",
+            this._actionQueue,
+            "next:",
+            queuedAction && queuedAction.item()
+                ? queuedAction.item().name
+                : null
+        );
         var queuedAction = this.nextQueuedAction();
         if (queuedAction) {
             this._itbActionPreview = queuedAction;
