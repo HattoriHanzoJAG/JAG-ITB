@@ -32,7 +32,7 @@
 (function() {
 
     const TRACE_CONNECTORS = true;
-    const DEBUG_CONNECTORS = false;
+    const DEBUG_CONNECTORS = true;
 
     //=============================================================================
     // Database Loading
@@ -317,13 +317,9 @@
  */
     BattleManager.connectorValidationState = function(actor) {
         // Combo continuation
-        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("CONNECTOR VALIDATION STATE");
-        if (DEBUG_CONNECTORS) {
-            console.log("actor:", actor.name());
-            console.log("preview target:", actor._connectorPreviewTarget);
-        }
         if (!actor) return null;
         var last = actor.lastQueuedAction();
+        console.log("Last queued action:", last);
         if (last && last.resultState) {
             return JsonEx.makeDeepCopy(last.resultState);
         }
@@ -380,15 +376,18 @@
     }; */
 
     BattleManager.isConnectorActionScopeCompatible = function(actor, action, target) {
-        console.log("Is connector action scope compatible?");
-        console.log("Actor", actor);
-        console.log("Action", action);
-        console.log("Target", target);
         if (!actor || !action || !target) return true;
         if (action.isForUser()) return target === actor;
         if (target.isEnemy()) return action.isForOpponent();
         if (target.isActor()) return action.isForFriend();
         return false;
+    };
+
+    BattleManager.resetTargetPreselection = function(actor) {
+        actor._queuedTarget = null;
+        actor._connectorPreviewTarget = null;
+        this._actorIndex = actor.index();
+        this._connectorTargetMode = true;
     };
 
     //=============================================================================
@@ -538,6 +537,20 @@
         return removed;
     };
 
+    Game_Battler.prototype.itbTimelineAction = function() {
+        var action = this.itbActionPreview();
+        // Explicit previews retain priority.
+        if (action) return action;
+        action = this.currentAction();
+        if (!action || !action.item()) return null;
+        var target = this._connectorPreviewTarget;
+        var correctScope = BattleManager.isConnectorActionScopeCompatible(this, action, target);
+        if (target && !correctScope) return null;
+        var state = BattleManager.connectorValidationState(this);
+        if (state && !action.canConnectToState(state)) return null;
+        return action;
+    };
+
     //=============================================================================
     // Game_Enemy Setup
     //=============================================================================
@@ -655,18 +668,11 @@
 
     // Connector Condition Checker
     Game_Action.prototype.checkConnectorCondition = function(value, condition) {
-        if (DEBUG_CONNECTORS) {
-            console.log("CHECK CONDITION", "value:", value, "condition:", condition);
-        }
         if (condition === undefined || condition === null || 
                 Object.keys(condition).length <= 0) {
-            if (DEBUG_CONNECTORS) console.log("CONDITION UNDEFINED -> PASS");
             return true;
         }
-        if (value === undefined) {
-            if (DEBUG_CONNECTORS) console.log("VALUE UNDEFINED -> PASS");
-            return true;
-        };
+        if (value === undefined) return true;
         switch (condition.type) {
             case "exact":
                 return value === condition.value;
@@ -748,17 +754,11 @@
 
     // Validate Entire State
     Game_Action.prototype.canConnectToState = function(state) {
-        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
-            console.log("CAN CONNECT TO STATE");
-            console.log("Skill:", this.item().name);
-            console.log("State:", state);
-        }
         var validation = this.connectorValidation(state);
         var keys = Object.keys(validation);
         for (var i = 0; i < keys.length; i++) {
             if (!validation[keys[i]]) return false;
         }
-        if (DEBUG_CONNECTORS) console.log("ALL CONNECTOR CHECKS PASSED");
         return true;
     };
 
@@ -770,11 +770,6 @@
         var rules = state._connectorRules || {};
         var result = {};
         var ruleKeys = Object.keys(rules);
-        if (DEBUG_CONNECTORS) {
-            console.log("Inputs:", inputs);
-            console.log("Rules:", rules);
-            console.log("HAS RULES?", !!state._connectorRules, state._connectorRules);
-        }
         // First establish strict/lax validity.
         for (var i = 0; i < ruleKeys.length; i++) {
             var name = ruleKeys[i];
@@ -840,6 +835,7 @@
             result._connectorRules = {};
         }
         var outputs = this.item().outputConnectors || {};
+        console.log("Outputs:", outputs);
         var keys = Object.keys(outputs);
         for (var i = 0; i < keys.length; i++) {
             var name = keys[i];
@@ -864,6 +860,12 @@
     //=============================================================================
     // Scene Battle Hooks
     //=============================================================================
+
+    var Connector_SB_update = Scene_Battle.prototype.update;
+    Scene_Battle.prototype.update = function() {
+        Connector_SB_update.call(this);
+        this.updateConnectorTargetWindow();
+    };
 
     var Connector_SB_onSelectAction = Scene_Battle.prototype.onSelectAction;
     Scene_Battle.prototype.onSelectAction = function() {
@@ -962,6 +964,7 @@
                     }
                 );
             }
+            if (actor.itbActionPreview() === action) actor.clearITBActionPreview();
             SoundManager.playBuzzer();
             return;
         }
@@ -980,6 +983,7 @@
             if (DEBUG_CONNECTORS) console.log("VALID:", valid);
             if (!valid) {
                 if (DEBUG_CONNECTORS) console.log("INVALID CONNECTOR ACTION -> REJECTED");
+                if (actor.itbActionPreview() === action) actor.clearITBActionPreview();
                 SoundManager.playBuzzer();
                 return;
             }
@@ -988,8 +992,12 @@
             if (DEBUG_CONNECTORS) console.log("RESULT STATE:", data.resultState);
         }
         if (DEBUG_CONNECTORS) console.log("Enqueue");
-        actor.enqueueAction(data);
+        var enqueued = actor.enqueueAction(data);
         if (DEBUG_CONNECTORS) console.log("queue length AFTER:", actor.queueLength());
+        if (enqueued) {
+            actor.setITBActionPreview(action);
+            BattleManager.requestTimelineRefresh("Queue Action");
+        }
     };
 
     var Connector_SB_finishActionQueue = Scene_Battle.prototype.finishActionQueue;
@@ -1002,7 +1010,8 @@
                 {
                     preview: actor ? !!actor._connectorPreviewTarget : null,
                     queueLength: actor ? actor.queueLength() : null,
-                    phase: BattleManager._phase
+                    phase: BattleManager._phase,
+                    initiative: actor ? actor.initiative : null
                 }
             );
         }
@@ -1038,8 +1047,8 @@
             console.log(
                 "STATE",
                 {
-                    preview: actor ? !!actor._connectorPreviewTarget : null,
-                    queueLength: actor ? actor.queueLength() : null,
+                    preview: this._actor ? !!this._actor._connectorPreviewTarget : null,
+                    queueLength: this._actor ? this._actor.queueLength() : null,
                     phase: BattleManager._phase
                 }
             );
@@ -1051,10 +1060,7 @@
             if (actor.queueLength() <= 0) {
                 if (DEBUG_CONNECTORS) console.log("Target preselection");
                 BattleManager._connectorTargetMode = true;
-                this._actorCommandWindow.deactivate();
-                this._enemyWindow.show();
-                this._enemyWindow.connectorPreviewSelect(0);
-                this._enemyWindow.active = true;
+                this.returnToTargetPreselection();
                 return;
             } else if (actor._queuedTarget) {
                 actor._connectorPreviewTarget = actor._queuedTarget;
@@ -1109,6 +1115,12 @@
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("Select Previous Command");
         var actor = this._actor || BattleManager.actor();
         if (!actor || !actor._connectorPreviewTarget) return;
+        if (!actor._canUndoQueuedAction) {
+            $gameTroop.members().forEach(function(enemy) {enemy.deselect()});
+            BattleManager.resetTargetPreselection(actor);
+            SceneManager._scene.returnToTargetPreselection();
+            return;
+        }
         Connector_BM_selectPrevious.call(this);
     };
 
@@ -1120,10 +1132,46 @@
                 this.constructor.name
             );
         }
+        var scene = SceneManager._scene;
+        // Let skill and item windows use their normal cancel handlers.
+        if (this === scene._skillWindow || this === scene._itemWindow) {
+            Connector_WS_processCancel.call(this);
+            return;
+        }
         var actor = BattleManager.actor();
-        if (!actor || !actor._connectorPreviewTarget) return;
+        if (!actor || !actor._connectorPreviewTarget) {
+            SoundManager.playCancel();
+            scene._actorWindow.deselect();
+            scene._enemyWindow.connectorPreviewSelect(0);
+            scene._enemyWindow.active = true;
+            scene._actorWindow.active = false;
+            return;
+        }
+        if (!actor._canUndoQueuedAction) {
+            SoundManager.playCancel();
+            this.updateInputData();
+            this.deactivate();
+            $gameTroop.members().forEach(function(enemy) {enemy.deselect()});
+            BattleManager.resetTargetPreselection(actor);
+            scene.returnToTargetPreselection();
+            return;
+        }
         Connector_WS_processCancel.call(this);
     };
+
+    Scene_Battle.prototype.returnToTargetPreselection = function(actor, action) {
+        this._actorCommandWindow.deactivate();
+        this._skillWindow.hide();
+        this._itemWindow.hide();
+        this._enemyWindow.show();
+        this._actorWindow.show();
+        //this._enemyWindow.deselect();
+        this._actorWindow.deselect();
+        this._enemyWindow.connectorPreviewSelect(0);
+        //this._actorWindow.connectorPreviewSelect(0);
+        this._enemyWindow.active = true;
+        this._actorWindow.active = false;
+    }
 
     Scene_Battle.prototype.queueConnectorActionAndReturn = function(actor, action) {
         if (!actor || !action || !action.item()) return false;
@@ -1136,6 +1184,37 @@
         this.queueConnectorAction(actor, action);
         this.returnToCommandInput();
         return true;
+    };
+
+    Scene_Battle.prototype.updateConnectorTargetWindow = function() {
+        if (!BattleManager._connectorTargetMode) return;
+        var enemyIndex = this._enemyWindow.getMouseOverEnemy();
+        var actorIndex = this._actorWindow.getMouseOverActor();
+        if (enemyIndex >= 0) {
+            this.setConnectorTargetWindow("enemy");
+            this._enemyWindow.connectorPreviewSelect(enemyIndex);
+        } else if (actorIndex >= 0) {
+            this.setConnectorTargetWindow("actor");
+            this._actorWindow.connectorPreviewSelect(actorIndex);
+        }
+    };
+
+    Scene_Battle.prototype.setConnectorTargetWindow = function(type) {
+        if (type === "enemy") {
+            if (!this._enemyWindow.active) SoundManager.playCursor();
+            this._actorWindow.deselect();
+            this._actorWindow.deactivate();
+            this._enemyWindow.active = true;
+            var enemy = this._enemyWindow.enemy();
+            if (enemy) $gameTroop.select(enemy);
+        } else if (type === "actor") {
+            if (!this._actorWindow.active) SoundManager.playCursor();
+            this._enemyWindow.deselect();
+            this._enemyWindow.deactivate();
+            this._actorWindow.active = true;
+            var actor = this._actorWindow.actor();
+            if (actor) $gameParty.select(actor);
+        }
     };
 
     Scene_Battle.prototype.commandGuard = function() {
@@ -1181,11 +1260,17 @@
         if (!Connector_WSL_isEnabled.call(this, item)) return false;
         var actor = this._actor;
         if (!actor || !actor.canUse(item)) return false;
-        var state = BattleManager.connectorValidationState(actor);
-        if (!state) return true;
         var action = new Game_Action(actor);
         action.setSkill(item.id);
         if (DEBUG_CONNECTORS) console.log("Action:", action);
+        var correctScope = BattleManager.isConnectorActionScopeCompatible(
+                actor,
+                action,
+                actor._connectorPreviewTarget
+        );
+        if (actor._connectorPreviewTarget && !correctScope) return false;
+        var state = BattleManager.connectorValidationState(actor);
+        if (!state) return true;
         return action.canConnectToState(state);
     };
 
@@ -1196,11 +1281,17 @@
         if (!Connector_WSL_includes.call(this, item)) return false;
         var actor = this._actor;
         if (!actor) return false;
-        var state = BattleManager.connectorValidationState(actor);
-        if (!state) return true;
         var action = new Game_Action(actor);
         action.setSkill(item.id);
         if (DEBUG_CONNECTORS) console.log("Action:", action);
+        var correctScope = BattleManager.isConnectorActionScopeCompatible(
+                actor,
+                action,
+                actor._connectorPreviewTarget
+        );
+        if (actor._connectorPreviewTarget && !correctScope) return false;
+        var state = BattleManager.connectorValidationState(actor);
+        if (!state) return true;
         return action.canConnectToState(state);
     };
 

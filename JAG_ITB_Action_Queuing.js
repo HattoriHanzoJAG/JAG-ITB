@@ -18,7 +18,7 @@
 (function() {
 
     const TRACE_QUEUING = true;
-    const DEBUG_QUEUING = false;
+    const DEBUG_QUEUING = true;
 
     var AQ_BM_endAction = BattleManager.endAction;
     BattleManager.endAction = function() {
@@ -52,9 +52,20 @@
         var action = this.createActionFromQueueData(this._actionQueue[0]);
         this._actions = [action];
         if (DEBUG_QUEUING) {
-            console.log("Current action:", action)
-            console.log("Actions queue:", this._actions);
-            console.log("Queue length:", this._actionQueue.length)
+            console.log(
+                "PROMOTE QUEUED ACTION for",
+                this.name(),
+                "queue:",
+                this._actionQueue,
+                "queue length:", 
+                this._actionQueue.length,
+                "actions:",
+                this._actions,
+                "currentAction:",
+                this.currentAction(),
+                "initiative:",
+                this.initiative
+            );
         }
         return true;
     };
@@ -82,7 +93,9 @@
     };
 
     Game_Battler.prototype.nextQueuedAction = function() {
+        console.log("Queue", this._actionQueue);
         if (!this._actionQueue || this._actionQueue.length === 0) return null;
+        console.log("Next qeueud action", this._actionQueue[0]);
         return this.createActionFromQueueData(this._actionQueue[0]);
     };
 
@@ -207,9 +220,9 @@
     };
 
     Scene_Battle.prototype.finishActionQueue = function() {
-        if (TRACE_QUEUING || DEBUG_QUEUING) console.log("FINISH QUEUE");
         var actor = BattleManager.actor();
         if (!actor) return;
+        if (TRACE_QUEUING || DEBUG_QUEUING) console.log("FINISH QUEUE", actor.name());
         actor.promoteQueuedAction();
         actor._canUndoQueuedAction = false;
         BattleManager.selectNextCommand();
@@ -330,6 +343,21 @@
                 this.contents.paintOpacity = this._blinkOpacity;
             }
             this.drawActionBorderAt(1, y - 3, "#CECECE");
+            /* console.log("DRAW QUEUED ICON", {
+                battler: this._battler.name(),
+                queueIndex: i,
+                skillId: data.skillId,
+                skillName: $dataSkills[data.skillId]
+                    ? $dataSkills[data.skillId].name
+                    : null,
+                isAttack: data.isAttack,
+                iconIndex: iconIndex,
+                y: y,
+                currentAction: this._battler.currentAction() &&
+                    this._battler.currentAction().item()
+                    ? this._battler.currentAction().item().name
+                    : null
+            }); */
             this.drawActionIcon(iconIndex, 4, y);
             this.contents.paintOpacity = 255;
         }
@@ -343,7 +371,6 @@
 
     var AQ_WCTBAI_updateRedraw = Window_CTBActionIcon.prototype.updateRedraw;
     Window_CTBActionIcon.prototype.updateRedraw = function() {
-        //console.log("Redraw frame", Graphics.frameCount);
         AQ_WCTBAI_updateRedraw.call(this);
         if (
             this._battler &&
@@ -420,6 +447,8 @@
 
     Game_Battler.prototype.setITBActionPreview = function(action, blink) {
         console.log("PREVIEW ACTION");
+        console.log(new Error().stack);
+        var queuedAction = this.nextQueuedAction();
         console.log(
             "SET PREVIEW",
             this.name(),
@@ -432,15 +461,12 @@
                 ? queuedAction.item().name
                 : null
         );
-        var queuedAction = this.nextQueuedAction();
         if (queuedAction) {
             this._itbActionPreview = queuedAction;
         } else {
             this._itbActionPreview = action;
         }
-        if (blink === undefined) {
-            blink = true;
-        }
+        if (blink === undefined) blink = true;
         this._itbPreviewBlink = blink;
     };
 
