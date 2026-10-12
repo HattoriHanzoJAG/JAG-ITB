@@ -27,7 +27,7 @@
         var subject = this._subject;
         if (DEBUG_QUEUING) console.log("END ACTION COMPLETE");
         if (subject && subject.isActor()) {
-            if (subject._actionQueue && subject._actionQueue.length > 0) {  
+            if (subject._actionQueue && subject.queueLength() > 0) {  
                 if (TRACE_QUEUING || DEBUG_QUEUING) console.log("SHIFT QUEUE");
                 subject._actionQueue.shift();
             }
@@ -44,7 +44,7 @@
 
     // Promote next queued action
     Game_Battler.prototype.promoteQueuedAction = function() {
-        if (!this._actionQueue || this._actionQueue.length <= 0) {
+        if (!this._actionQueue || this.queueLength() <= 0) {
             if (DEBUG_QUEUING) console.log("Reset action queue");
             this._actions = [];
             return false;
@@ -86,7 +86,7 @@
 
     // Queue Helper Functions
     Game_Battler.prototype.enqueueAction = function(actionData) {
-        if (this._actionQueue.length >= this.maxQueuedActions()) return false;
+        if (this.queueLength() >= this.maxQueuedActions()) return false;
         this._actionQueue.push(actionData);
         this._canUndoQueuedAction = true;
         return true;
@@ -94,20 +94,21 @@
 
     Game_Battler.prototype.nextQueuedAction = function() {
         console.log("Queue", this._actionQueue);
-        if (!this._actionQueue || this._actionQueue.length === 0) return null;
+        if (!this._actionQueue || this.queueLength() === 0) return null;
         console.log("Next qeueud action", this._actionQueue[0]);
         return this.createActionFromQueueData(this._actionQueue[0]);
     };
 
     Game_Battler.prototype.lastQueuedAction = function() {
-        if (!this._actionQueue || this._actionQueue.length === 0) return null;
-        return this._actionQueue[this._actionQueue.length - 1];
+        if (!this._actionQueue || this.queueLength() === 0) return null;
+        return this._actionQueue[this.queueLength() - 1];
     };
 
     Game_Battler.prototype.undoLastQueuedAction = function() {
-        if (!this._actionQueue || this._actionQueue.length === 0) {
+        if (!this._actionQueue || this.queueLength() === 0) {
             return false;
         }
+        console.log("Undo last queued action");
         var removed = this._actionQueue.pop();
         this._canUndoQueuedAction = false;
         return removed;

@@ -315,16 +315,17 @@
         ];
     };  
  */
-    BattleManager.connectorValidationState = function(actor) {
+    BattleManager.connectorValidationState = function(actor, target) {
         // Combo continuation
         if (!actor) return null;
         var last = actor.lastQueuedAction();
-        console.log("Last queued action:", last);
         if (last && last.resultState) {
             return JsonEx.makeDeepCopy(last.resultState);
         }
         // First action target preview
-        if (actor._connectorPreviewTarget) {
+        if (target) {
+            return target.connectorState();
+        } else if (actor._connectorPreviewTarget) {
             return actor._connectorPreviewTarget.connectorState();
         }
         return null;

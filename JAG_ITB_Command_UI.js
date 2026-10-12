@@ -576,14 +576,10 @@
         this._connectorValidation = {};
         this._connectorValidationState = null;
         if (!actor) return;
-        var state;
-        if (target) {
-            state = target.connectorState();
-        } else if (this._targetBrowseTarget) {
-            state = this._targetBrowseTarget.connectorState();
-        } else {
-            state = BattleManager.connectorValidationState(actor);
-        }
+        var state = BattleManager.connectorValidationState(
+            actor,
+            target || this._targetBrowseTarget
+        );
         console.log("State:", state);
         if (!state) return;
         this._connectorValidationState = JsonEx.makeDeepCopy(state);
@@ -643,11 +639,7 @@
     };
 
     BattleManager.ITB_UI.connectorValidationState = function(actor) {
-        if (!actor) return null;
-        if (this._targetBrowseTarget) {
-            return this._targetBrowseTarget.connectorState();
-        }
-        return BattleManager.connectorValidationState(actor);
+        return BattleManager.connectorValidationState(actor, this._targetBrowseTarget);
     };
 
     //--------------------------------------------------------------------------
@@ -1012,6 +1004,10 @@
 
     Window_ActorCommand.prototype.refreshSelection = function() {
         console.log("Refresh Selection");
+        if (BattleManager.actor()) {
+            console.log("Action queue", BattleManager.actor()._actionQueue);
+            console.log("Queue length", BattleManager.actor().queueLength());
+        }
         this.clearSelectionHighlights();
         var selected = this.currentSelectionSprite();
         //console.log("SELECT", selected);
@@ -2051,6 +2047,7 @@
         // if (!visible) return;
         var scene = SceneManager._scene;
         if (!scene) return;
+        console.log("Actor", BattleManager.actor());
         if (sprite && sprite._uiData.region === "actions") {
             scene.updatePreviewWindow(BattleManager.actor(), sprite._uiData.action);
         } else {
@@ -2755,7 +2752,11 @@
         this.contents.clear();
         this.drawTitle(action);
         this.drawScope();
-        if (!this._scopeFailure) this.drawConnectorRows();
+        if (this._scopeFailure) {
+            this.clearRowSprites();
+        } else {
+            this.drawConnectorRows();
+        }
         this.drawConnectorHeader();
         if (!this._scopeFailure) {
             this.layoutConnectorAxis();
@@ -4463,7 +4464,7 @@
     // Draw actor icon
     //--------------------------------------------------------------------------
 
-    Window_Preview.prototype.drawHeaderActor = function(bitmap, actor) {
+    Window_Preview.prototype.drawHeaderActorFace = function(bitmap, actor) {
         var faceBitmap = ImageManager.loadFace(actor.faceName());
         var pw = Window_Base._faceWidth;
         var ph = Window_Base._faceHeight;
