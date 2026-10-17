@@ -32,7 +32,7 @@
 (function() {
 
     const TRACE_CONNECTORS = true;
-    const DEBUG_CONNECTORS = true;
+    const DEBUG_CONNECTORS = false;
 
     //=============================================================================
     // Database Loading
@@ -836,7 +836,6 @@
             result._connectorRules = {};
         }
         var outputs = this.item().outputConnectors || {};
-        console.log("Outputs:", outputs);
         var keys = Object.keys(outputs);
         for (var i = 0; i < keys.length; i++) {
             var name = keys[i];
@@ -1143,9 +1142,7 @@
         if (!actor || !actor._connectorPreviewTarget) {
             SoundManager.playCancel();
             scene._actorWindow.deselect();
-            scene._enemyWindow.connectorPreviewSelect(0);
-            scene._enemyWindow.active = true;
-            scene._actorWindow.active = false;
+            scene.prepareEnemyPreselection();
             return;
         }
         if (!actor._canUndoQueuedAction) {
@@ -1164,14 +1161,15 @@
         this._actorCommandWindow.deactivate();
         this._skillWindow.hide();
         this._itemWindow.hide();
+        this.prepareEnemyPreselection();
+    }
+
+    Scene_Battle.prototype.prepareEnemyPreselection = function(actor, action) {
         this._enemyWindow.show();
-        this._actorWindow.show();
-        //this._enemyWindow.deselect();
-        this._actorWindow.deselect();
+        this._actorWindow.deactivate();
+        this._actorWindow.hide();
         this._enemyWindow.connectorPreviewSelect(0);
-        //this._actorWindow.connectorPreviewSelect(0);
-        this._enemyWindow.active = true;
-        this._actorWindow.active = false;
+        this._enemyWindow.activate();
     }
 
     Scene_Battle.prototype.queueConnectorActionAndReturn = function(actor, action) {
@@ -1188,33 +1186,168 @@
     };
 
     Scene_Battle.prototype.updateConnectorTargetWindow = function() {
-        if (!BattleManager._connectorTargetMode) return;
+        if (!BattleManager._connectorTargetMode) {
+            this._connectorTargetInputMode = null;
+            this._connectorTargetLastMouseX = TouchInput.x;
+            this._connectorTargetLastMouseY = TouchInput.y;
+            return;
+        }
+        // Keyboard browsing takes priority until the mouse moves.
+        if (Input.isTriggered("left")) {
+            this._connectorTargetInputMode = "keyboard";
+            this.switchConnectorTargetWindow("enemy");
+            return;
+        }
+        if (Input.isTriggered("right")) {
+            this._connectorTargetInputMode = "keyboard";
+            this.switchConnectorTargetWindow("actor");
+            return;
+        }
+        if (Input.isRepeated("up")) {
+            this._connectorTargetInputMode = "keyboard";
+            this.moveConnectorTarget(-1);
+            return;
+        }
+        if (Input.isRepeated("down")) {
+            this._connectorTargetInputMode = "keyboard";
+            this.moveConnectorTarget(1);
+            return;
+        }
+        // Resume mouse-driven selection when the pointer moves.
+        var mouseMoved =
+            this._connectorTargetLastMouseX !== TouchInput.x ||
+            this._connectorTargetLastMouseY !== TouchInput.y;
+        this._connectorTargetLastMouseX = TouchInput.x;
+        this._connectorTargetLastMouseY = TouchInput.y;
+        //if (mouseMoved) this._connectorTargetInputMode = "mouse";
+        //if (this._connectorTargetInputMode === "keyboard") return;
         var enemyIndex = this._enemyWindow.getMouseOverEnemy();
         var actorIndex = this._actorWindow.getMouseOverActor();
+        if (enemyIndex >= 0  && (!this._enemyWindow.active || mouseMoved)) {
+            this._connectorTargetInputMode = "mouse";
+            this.setConnectorTargetWindow("enemy");
+            this.previewConnectorTarget(this._enemyWindow, enemyIndex);
+            return;
+            //this._enemyWindow.connectorPreviewSelect(enemyIndex);
+        } else if (actorIndex >= 0) {
+            this._connectorTargetInputMode = "mouse";
+            this.setConnectorTargetWindow("actor");
+            this.previewConnectorTarget(this._actorWindow, actorIndex);
+            return;
+            //this._actorWindow.connectorPreviewSelect(actorIndex);
+        }
+        if (mouseMoved) this._connectorTargetInputMode = "mouse";
+        if (this._connectorTargetInputMode === "keyboard") return;
+        // Normal mouse browsing within the active window.
         if (enemyIndex >= 0) {
             this.setConnectorTargetWindow("enemy");
-            this._enemyWindow.connectorPreviewSelect(enemyIndex);
+            this.previewConnectorTarget(this._enemyWindow, enemyIndex);
         } else if (actorIndex >= 0) {
             this.setConnectorTargetWindow("actor");
-            this._actorWindow.connectorPreviewSelect(actorIndex);
+            this.previewConnectorTarget(this._actorWindow, actorIndex);
         }
     };
 
+    /* Scene_Battle.prototype.setConnectorTargetWindow = function(type) {
+        var currentWindow = this.connectorTargetWindow();
+        var targetWindow = type === "actor" ? this._actorWindow : this._enemyWindow;
+        // Already in the requested target mode.
+        if (currentWindow === targetWindow && targetWindow.visible) return;
+        if (currentWindow !== targetWindow) SoundManager.playCursor();
+        if (type === "actor") {
+            this._enemyWindow.deactivate();
+            this._enemyWindow.hide();
+            this._actorWindow.show();
+            this._actorWindow.activate();
+            var enemy = this._enemyWindow.enemy();
+            if (enemy) $gameTroop.select(enemy);
+        } else {
+            this._actorWindow.deactivate();
+            this._actorWindow.hide();
+            this._enemyWindow.show();
+            this._enemyWindow.activate();
+            var actor = this._actorWindow.actor();
+            if (actor) $gameParty.select(actor);
+        }
+    }; */
+
     Scene_Battle.prototype.setConnectorTargetWindow = function(type) {
         if (type === "enemy") {
-            if (!this._enemyWindow.active) SoundManager.playCursor();
-            this._actorWindow.deselect();
+            if (this._enemyWindow.active &&
+                this._enemyWindow.visible &&
+                !this._actorWindow.visible) {
+                return;
+            } else if (!this._enemyWindow.active) {
+                SoundManager.playCursor();
+            }
+            //this._actorWindow.deselect();
             this._actorWindow.deactivate();
+            this._actorWindow.hide();
+            this._enemyWindow.show();
+            this._enemyWindow.activate();
             this._enemyWindow.active = true;
             var enemy = this._enemyWindow.enemy();
             if (enemy) $gameTroop.select(enemy);
         } else if (type === "actor") {
-            if (!this._actorWindow.active) SoundManager.playCursor();
-            this._enemyWindow.deselect();
+            // Already in actor-target mode: preserve its current selection.
+            if (this._actorWindow.active &&
+                this._actorWindow.visible &&
+                !this._enemyWindow.visible) {
+                return;
+            } else if (!this._actorWindow.active) {
+                SoundManager.playCursor();
+            }
+            //this._enemyWindow.deselect();
             this._enemyWindow.deactivate();
+            this._enemyWindow.hide();
+            this._actorWindow.show();
+            this._actorWindow.activate();
             this._actorWindow.active = true;
             var actor = this._actorWindow.actor();
             if (actor) $gameParty.select(actor);
+        }
+    };
+
+    Scene_Battle.prototype.connectorTargetWindow = function() {
+        if (this._actorWindow && this._actorWindow.active) return this._actorWindow;
+        if (this._enemyWindow && this._enemyWindow.active) return this._enemyWindow;
+        return null;
+    };
+
+    Scene_Battle.prototype.moveConnectorTarget = function(direction) {
+        var window = this.connectorTargetWindow();
+        if (!window) return;
+        var count = window.maxItems();
+        if (count <= 0) return;
+        var index = window.index();
+        if (index < 0) index = direction < 0 ? 0 : -1;
+        index = (index + direction + count) % count;
+        this.previewConnectorTarget(window, index);
+    };
+
+    Scene_Battle.prototype.switchConnectorTargetWindow = function(type) {
+        var currentWindow = this.connectorTargetWindow();
+        var targetWindow = type === "actor" ? this._actorWindow : this._enemyWindow;
+        if (!currentWindow || currentWindow === targetWindow) return;
+        var count = targetWindow.maxItems();
+        if (count <= 0) return;
+        // Preserve the approximate index when changing target types.
+        var index = currentWindow.index();
+        index = Math.max(0, Math.min(index, count - 1));
+        this.setConnectorTargetWindow(type);
+        this.previewConnectorTarget(targetWindow, index);
+    };
+
+    Scene_Battle.prototype.previewConnectorTarget = function(window, index) {
+        if (!window || index < 0 || index >= window.maxItems()) return;
+        //window.connectorPreviewSelect(index);
+        window.select(index);
+        var target = window === this._actorWindow ? window.actor() : window.enemy();
+        if (!target) return;
+        if (target.isActor()) {
+            $gameParty.select(target);
+        } else if (target.isEnemy()) {
+            $gameTroop.select(target);
         }
     };
 
@@ -1235,10 +1368,22 @@
     // Window Extensions
     //=============================================================================
 
+    var Connector_WBE_processCursorMove = Window_BattleEnemy.prototype.processCursorMove;
+    Window_BattleEnemy.prototype.processCursorMove = function() {
+        if (BattleManager._connectorTargetMode) return;
+        Connector_WBE_processCursorMove.call(this);
+    };
+
     Window_BattleEnemy.prototype.connectorPreviewSelect = function(index) {
         this._index = index;
         this.ensureCursorVisible();
         this.updateCursor();
+    };
+
+    var Connector_WBA_processCursorMove = Window_BattleActor.prototype.processCursorMove;
+    Window_BattleActor.prototype.processCursorMove = function() {
+        if (BattleManager._connectorTargetMode) return;
+        Connector_WBA_processCursorMove.call(this);
     };
 
     Window_BattleActor.prototype.connectorPreviewSelect = function(index) {
