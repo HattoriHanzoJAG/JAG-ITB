@@ -572,7 +572,7 @@
     //--------------------------------------------------------------------------
 
     BattleManager.ITB_UI.refreshConnectorValidation = function(actor, target) {
-        console.log("Refresh connector validation")
+        //console.log("Refresh connector validation")
         this._connectorValidation = {};
         this._connectorValidationState = null;
         if (!actor) return;
@@ -580,7 +580,7 @@
             actor,
             target || this._targetBrowseTarget
         );
-        console.log("State:", state);
+        //console.log("State:", state);
         if (!state) return;
         this._connectorValidationState = JsonEx.makeDeepCopy(state);
         var skills = actor.skills();
@@ -699,20 +699,20 @@
     BattleManager.ITB_UI.updateTargetBrowse = function(target) {
         var actor = BattleManager.actor();
         if (!actor || !target) return;
-        console.log(
-            "TARGET BROWSE:",
-            target.name(),
-            target.index()
-        );
+        //console.log(
+        //    "TARGET BROWSE:",
+        //    target.name(),
+        //    target.index()
+        //);
         // Once a target has been accepted, target browsing is finished.
         // The accepted target is now authoritative.
         if (actor._connectorPreviewTarget) return;
         this.setTargetBrowseTarget(target);
         this.refreshConnectorValidation(actor, target);
-        console.log(
-            "TARGET VALIDATION:",
-            this._connectorValidation
-        );
+        //console.log(
+        //    "TARGET VALIDATION:",
+        //    this._connectorValidation
+        //);
     };
 
     /* BattleManager.ITB_UI.getTargetBrowseTargets = function() {
@@ -2161,6 +2161,18 @@
         this.upArrowVisible = false;
         this.downArrowVisible = false;
     };
+
+    //--------------------------------------------------------------------------
+    // Circular browsing
+    //--------------------------------------------------------------------------
+
+    /* Window_BattleStatus.prototype.cycleDisplayedActor = function(direction) {
+        var members = $gameParty.battleMembers();
+        if (members.length === 0) return;
+        var currentIndex = this._displayOrderStartIndex || 0;
+        var nextIndex = (currentIndex + direction + members.length) % members.length;
+        this.setDisplayedActor(members[nextIndex]);
+    }; */
 
     //--------------------------------------------------------------------------
     // Display active actor indicator
@@ -5244,7 +5256,19 @@
         var faceIndex = actor.faceIndex();
         var sx = (faceIndex % 4) * pw;
         var sy = Math.floor(faceIndex / 4) * ph;
-        this.contents.blt(
+        var size = this._actorIconSize;
+        var window = this;
+        function drawFace() {
+            if (window.contents && !window.contents._destroyed) {
+                window.contents.blt(bitmap, sx, sy, pw, ph, x, y, size, size);
+            }
+        }
+        if (bitmap.isReady()) {
+            drawFace();
+        } else {
+            bitmap.addLoadListener(drawFace);
+        }
+        /* this.contents.blt(
             bitmap, 
             sx, 
             sy, 
@@ -5254,7 +5278,7 @@
             y, 
             this._actorIconSize, 
             this._actorIconSize
-        );
+        ); */
     };
 
     //--------------------------------------------------------------------------
@@ -5333,7 +5357,6 @@
 
     var ITB_Command_WBA_select = Window_BattleActor.prototype.select;
     Window_BattleActor.prototype.select = function(index) {
-        console.log(new Error().stack);
         ITB_Command_WBA_select.call(this, index);
         if (!BattleManager._connectorTargetMode) return;
         BattleManager.ITB_UI.updateTargetBrowse(this.actor());
@@ -5361,6 +5384,7 @@
     var ITB_Command_SB_update = Scene_Battle.prototype.update;
     Scene_Battle.prototype.update = function() {
         ITB_Command_SB_update.call(this);
+        //this.updateITBTargetBrowseState();
     //     // Use mouse wheel to toggle between actors in battle status window
     //     if (TouchInput.wheelY >= 20) {
     //         this.cycleStatusActor(1);
@@ -5378,14 +5402,14 @@
             if (TouchInput.wheelY >= 20) actorCommand.scrollITBActionRows(1);
             if (TouchInput.wheelY <= -20) actorCommand.scrollITBActionRows(-1);
         }
-        if (BattleManager._connectorTargetMode) {
+        /* if (BattleManager._connectorTargetMode) {
             if (Input.isRepeated('right')) {
                 BattleManager.ITB_UI.moveTargetBrowse(1);
             }
             if (Input.isRepeated('left')) {
                 BattleManager.ITB_UI.moveTargetBrowse(-1);
             }
-        }
+        } */
     }
 
     var ITB_Command_updateWindowPositions = Scene_Battle.prototype.updateWindowPositions;
@@ -5421,8 +5445,17 @@
 
     Scene_Battle.prototype.selectITBDisplayedActor = function(actor) {
         if (!actor || !this._statusWindow) return;
+        console.log("Portrait selected:", actor.name(), actor.index());
+        // Always update the displayed actor in the battle status window.
         this._statusWindow.setDisplayedActor(actor);
-        //this._statusWindow.activate();
+        console.log("Status selection:", this._statusWindow.index());
+        console.log("Displayed actor:", this._statusWindow._displayedActor.name());
+        // When actor-target browsing is active, also select the actor sprite.
+        if (this._actorWindow && this._actorWindow.active) {
+            var members = $gameParty.battleMembers();
+            var actorIndex = members.indexOf(actor);
+            if (actorIndex >= 0) this._actorWindow.select(actorIndex);
+        }
     };
 
     //Scene_Battle.prototype.resetITBDisplayedActor = function() {
@@ -5580,6 +5613,35 @@
     };
 
     //--------------------------------------------------------------------------
+    // Obseve target changes
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.updateITBTargetBrowseState = function() {
+        if (!BattleManager._connectorTargetMode) {
+            this._itbLastBrowseTarget = null;
+            BattleManager.ITB_UI.clearTargetBrowseTarget();
+            return;
+        }
+        var window = null;
+        if (this._actorWindow && this._actorWindow.active) {
+            window = this._actorWindow;
+        } else if (this._enemyWindow && this._enemyWindow.active) {
+            window = this._enemyWindow;
+        }
+        var target = null;
+        if (window) {
+            target = window === this._actorWindow ? window.actor() : window.enemy();
+        }
+        if (target === this._itbLastBrowseTarget) return;
+        this._itbLastBrowseTarget = target;
+        if (target) {
+            BattleManager.ITB_UI.updateTargetBrowse(target);
+        } else {
+            BattleManager.ITB_UI.clearTargetBrowseTarget();
+        }
+    };
+
+    //--------------------------------------------------------------------------
     // Refresh action interface
     //--------------------------------------------------------------------------
 
@@ -5610,6 +5672,11 @@
         sprite._isSvEnemy = isSvEnemy;
         return sprite;
     }
+
+    //--------------------------------------------------------------------------
+    // Keyboard target browsing helpers
+    //--------------------------------------------------------------------------
+
 
     //Scene_Battle.prototype.refreshUI = function(actor, action) {
     //    if (this._actorCommandWindow) this._actorCommandWindow.refreshSelection();
