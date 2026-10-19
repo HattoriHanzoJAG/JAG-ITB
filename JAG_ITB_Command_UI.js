@@ -1874,7 +1874,7 @@
 
     //--------------------------------------------------------------------------
     // Finish wrapper
-    //--------------------------------------------------------------------------
+    //-------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.executeFinishCommand = function() {
         console.log("FINISH");
@@ -5672,6 +5672,36 @@
         sprite._isSvEnemy = isSvEnemy;
         return sprite;
     }
+
+    //--------------------------------------------------------------------------
+    // Process Cancel
+    //--------------------------------------------------------------------------
+
+    var ITB_Command_WS_processCancel = Window_Selectable.prototype.processCancel;
+    Window_Selectable.prototype.processCancel = function() {
+        ITB_Command_WS_processCancel.call(this);
+        // Only handle cancellation that returns to target preselection.
+        var scene = SceneManager._scene;
+        if (
+            !scene || 
+            !scene._previewWindow ||
+            !scene._actorWindow ||
+            this === scene._skillWindow ||
+            this === scene._itemWindow
+        ) {
+            return;
+        }
+        var actor = BattleManager.actor();
+        // The connector plugin returns to target preselection when
+        // there is no queued action available to undo.
+        if (
+            !actor ||
+            !actor._connectorPreviewTarget ||
+            !actor._canUndoQueuedAction
+        ) {
+            scene.updatePreviewWindow(null, null);
+        }
+    };
 
     //--------------------------------------------------------------------------
     // Keyboard target browsing helpers

@@ -924,12 +924,19 @@
         // ----------------------------------
         if (BattleManager._connectorTargetMode) {
             if (DEBUG_CONNECTORS) console.log("Connector Target Preselection");
-            actor._connectorPreviewTarget = this._actorWindow.actor();
+            var target = this._actorWindow.actor();
+            actor._connectorPreviewTarget = target;
+            //actor._connectorPreviewTargetSprite = this.CacheTargetImageExtension(target);
             BattleManager._connectorTargetMode = false;
-            this._enemyWindow.hide();
-            this._enemyWindow.deactivate();
             this._actorWindow.hide();
             this._actorWindow.deactivate();
+            target.deselect();
+            if (DEBUG_CONNECTORS) {
+                console.log(
+                    actor._connectorPreviewTarget,
+                    actor._connectorPreviewTarget.isSelected()
+                );
+            }
             return;
         }
         Connector_SB_onActorOk.call(this);
@@ -1110,18 +1117,22 @@
         this._actorCommandWindow.activate();
     };
 
-    var Connector_BM_selectPrevious = Scene_Battle.selectPreviousCommand;
-    Scene_Battle.selectPreviousCommand = function() {
+    var Connector_SB_selectPrevious = Scene_Battle.prototype.selectPreviousCommand;
+    Scene_Battle.prototype.selectPreviousCommand = function() {
         if (TRACE_CONNECTORS || DEBUG_CONNECTORS) console.log("Select Previous Command");
         var actor = this._actor || BattleManager.actor();
         if (!actor || !actor._connectorPreviewTarget) return;
         if (!actor._canUndoQueuedAction) {
-            $gameTroop.members().forEach(function(enemy) {enemy.deselect()});
-            BattleManager.resetTargetPreselection(actor);
-            SceneManager._scene.returnToTargetPreselection();
+            if (!actor.queueLength() || actor.queueLength() === 0) {
+                $gameTroop.members().forEach(function(enemy) {enemy.deselect()});
+                BattleManager.resetTargetPreselection(actor);
+                SceneManager._scene.returnToTargetPreselection();
+            }
             return;
         }
-        Connector_BM_selectPrevious.call(this);
+        console.log("Actor:", actor);
+        if (actor) console.log("Can undo queued action:", actor._canUndoQueuedAction);
+        Connector_SB_selectPrevious.call(this);
     };
 
     var Connector_WS_processCancel = Window_Selectable.prototype.processCancel;
@@ -1146,12 +1157,14 @@
             return;
         }
         if (!actor._canUndoQueuedAction) {
-            SoundManager.playCancel();
-            this.updateInputData();
-            this.deactivate();
-            $gameTroop.members().forEach(function(enemy) {enemy.deselect()});
-            BattleManager.resetTargetPreselection(actor);
-            scene.returnToTargetPreselection();
+            if (!actor.queueLength() || actor.queueLength() === 0) {
+                SoundManager.playCancel();
+                this.updateInputData();
+                this.deactivate();
+                $gameTroop.members().forEach(function(enemy) {enemy.deselect()});
+                BattleManager.resetTargetPreselection(actor);
+                scene.returnToTargetPreselection();
+            }
             return;
         }
         Connector_WS_processCancel.call(this);
