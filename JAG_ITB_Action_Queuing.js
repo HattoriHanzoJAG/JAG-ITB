@@ -18,7 +18,7 @@
 (function() {
 
     const TRACE_QUEUING = true;
-    const DEBUG_QUEUING = true;
+    const DEBUG_QUEUING = false;
 
     var AQ_BM_endAction = BattleManager.endAction;
     BattleManager.endAction = function() {
@@ -93,9 +93,7 @@
     };
 
     Game_Battler.prototype.nextQueuedAction = function() {
-        console.log("Queue", this._actionQueue);
         if (!this._actionQueue || this.queueLength() === 0) return null;
-        console.log("Next qeueud action", this._actionQueue[0]);
         return this.createActionFromQueueData(this._actionQueue[0]);
     };
 
@@ -108,7 +106,6 @@
         if (!this._actionQueue || this.queueLength() === 0) {
             return false;
         }
-        console.log("Undo last queued action");
         var removed = this._actionQueue.pop();
         this._canUndoQueuedAction = false;
         return removed;
@@ -186,7 +183,6 @@
 
     Scene_Battle.prototype.createActorCommandWindow = function() {
         //console.log(new Error().stack);
-        //console.log("actor", this._actor);
         this._actorCommandWindow = new Window_ActorCommand();
         this._actorCommandWindow.setHandler("finishQueue", this.finishActionQueue.bind(this));
         this._actorCommandWindow.setHandler('attack', this.commandAttack.bind(this));
@@ -447,21 +443,7 @@
     };
 
     Game_Battler.prototype.setITBActionPreview = function(action, blink) {
-        console.log("PREVIEW ACTION");
-        console.log(new Error().stack);
         var queuedAction = this.nextQueuedAction();
-        console.log(
-            "SET PREVIEW",
-            this.name(),
-            "passed:",
-            action && action.item() ? action.item().name : null,
-            "queue:",
-            this._actionQueue,
-            "next:",
-            queuedAction && queuedAction.item()
-                ? queuedAction.item().name
-                : null
-        );
         if (queuedAction) {
             this._itbActionPreview = queuedAction;
         } else {

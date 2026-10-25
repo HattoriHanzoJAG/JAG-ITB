@@ -899,7 +899,7 @@
             if (DEBUG_CONNECTORS) console.log("Connector Target Preselection");
             var target = this._enemyWindow.enemy()
             actor._connectorPreviewTarget = target;
-            actor._connectorPreviewTargetSprite = this.CacheTargetImageExtension(target);
+            //actor._connectorPreviewTargetSprite = this.CacheTargetImageExtension(target);
             BattleManager._connectorTargetMode = false;
             this._enemyWindow.hide();
             this._enemyWindow.deactivate();
@@ -1372,10 +1372,10 @@
         this.selectNextCommand();
     };
 
-    Scene_Battle.prototype.CacheTargetImageExtension = function(target) {
+    //Scene_Battle.prototype.CacheTargetImageExtension = function(target) {
         // Extension hook for caching target image
-        return null;
-    }
+    //    return null;
+    //}
 
     //=============================================================================
     // Window Extensions

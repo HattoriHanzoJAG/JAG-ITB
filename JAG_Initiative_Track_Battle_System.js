@@ -25,7 +25,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 (function() {
 
     const TRACE_ITB = true;
-    const DEBUG_ITB = false;
+    const DEBUG_ITB = true;
     const DEBUG_Timeline = false;
 
     var JAG_DM_isDatabaseLoaded = DataManager.isDatabaseLoaded;
@@ -63,11 +63,16 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             console.log("Current Action:", action);
             console.log("isCharging:", this.isCTBCharging());
             console.log("Initiative before:", this._initiative);
-            console.log("Queue:", this._actionQueue);
         }
 	    if (this.isCTBCharging()) return;
+        console.log("Battler CTB Charging");
         if (BattleManager._subject !== this) return;
         if (BattleManager._bypassCtbEndTurn) return;
+        console.log("Proceed to CTB End Turn");
+        console.log("Phase", BattleManager._phase);
+        //console.log("Break CTB Phase", BattleManager.breakCTBPhase());
+        //console.log("Charged Battler", BattleManager.getChargedCTBBattler());
+        //console.log("Ready Battler", BattleManager.getReadyCTBBattler());
         if (action) {
             var item = action.item();
             if (item) {
@@ -185,6 +190,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             console.log("Preview Target:", battler._connectorPreviewTarget);
             console.log("Battler is enemy:", battler.isEnemy());
             console.log("Battler can input:", battler.canInput());
+            console.log("CTB Phase", this._phase);
         }
         JAG_BM_startCTBInput.call(this, battler);
         BattleManager.requestTimelineRefresh("Start Input");
@@ -198,29 +204,29 @@ window.Window_CTBTimeline = Window_CTBTimeline;
             console.log("Action:", this.actor().currentAction());
         }
         if (this.isCTB()) {
-        if (!this.actor()) return this.setCTBPhase();
-        this.resetNonPartyActorCTB();
-        this._subject = this.actor();
-        if (TRACE_ITB || DEBUG_ITB) console.log("CALLING setupCTBCharge");
-        this.actor().setupCTBCharge();
-        //console.log("Queued:", this.actor()._queued);
-        //console.log("Initiative:", this.actor()._initiative);
-        if (this.actor().isCTBCharging()) {
-            if (TRACE_ITB || DEBUG_ITB) console.log("ADVANCING CTB PHASE I", this.actor()._initiative);
-            if (DEBUG_ITB) {
-                console.log("actor:", this.actor().name());
+            if (!this.actor()) return this.setCTBPhase();
+            this.resetNonPartyActorCTB();
+            this._subject = this.actor();
+            if (TRACE_ITB || DEBUG_ITB) console.log("CALLING setupCTBCharge");
+            this.actor().setupCTBCharge();
+            //console.log("Queued:", this.actor()._queued);
+            //console.log("Initiative:", this.actor()._initiative);
+            if (this.actor().isCTBCharging()) {
+                if (TRACE_ITB || DEBUG_ITB) console.log("ADVANCING CTB PHASE I", this.actor()._initiative);
+                if (DEBUG_ITB) {
+                    console.log("actor:", this.actor().name());
+                }
+                this.actor().spriteStepBack();
+                this.actor().requestMotionRefresh();
+                this._actorIndex = undefined;
+                this.setCTBPhase();  
+            } else if (this.isValidCTBActorAction()) {
+                this.startCTBAction(this.actor());
+            } else {
+                if (this.actor()) this.ctbSkipTurn();
+                $gameParty.requestMotionRefresh();
+                this.setCTBPhase();
             }
-            this.actor().spriteStepBack();
-            this.actor().requestMotionRefresh();
-            this._actorIndex = undefined;
-            this.setCTBPhase();  
-        } else if (this.isValidCTBActorAction()) {
-            this.startCTBAction(this.actor());
-        } else {
-            if (this.actor()) this.ctbSkipTurn();
-            $gameParty.requestMotionRefresh();
-            this.setCTBPhase();
-          }
         } else {
             JAG_BM_selectNextCommand.call(this);
         }
@@ -642,7 +648,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
     Window_CTBActionIcon.prototype.updateActionIcon = function() {
         if (!this._battler) return;
         var preview = this._battler.itbActionPreview();
-        var changed = 
+        var changed =
             this._iconIndex !== this._battler.ctbActionIcon() || 
             this._previewState !== preview;
         if (changed) {
@@ -758,8 +764,7 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_CTBActionIcon.prototype.targetBattler = function() {
         if (!this._battler) return null;
-        var action = this._battler.itbActionPreview();
-        if (!action) action = this._battler.currentAction();
+        var action = this._battler.itbTimelineAction();
         if (!action) return null;
         if (!BattleManager.actionHasSingleTarget(action.item())) return null;
         if (this._battler.isActor()) {
@@ -859,56 +864,84 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     Window_Base.prototype.drawTargetMiniIconAt = function(target, x, y, size, redrawCallback) {
         if (!target) return;
+        this.drawTargetMiniIconToBitmap(target, this.contents, x, y, size, null, redrawCallback)
+    };
+
+    Window_Base.prototype.drawTargetMiniIconToBitmap = function(target, destBitmap, x, y, width, height, redrawCallback) {
+        if (!target || !destBitmap) return false;
         var bitmap;
+        var sx = 0;
+        var sy = 0;
+        var sw;
+        var sh;
         if (target.isActor()) {
             bitmap = ImageManager.loadFace(target.faceName());
             if (!bitmap.isReady()) {
-                if (redrawCallback) {
-                    bitmap.addLoadListener(redrawCallback);
-                }
-                return;
+                if (redrawCallback) bitmap.addLoadListener(redrawCallback);
+                return false;
             }
             var faceIndex = target.faceIndex();
-            var pw = Window_Base._faceWidth;
-            var ph = Window_Base._faceHeight;
-            var sx = (faceIndex % 4) * pw;
-            var sy = Math.floor(faceIndex / 4) * ph;
-            this.contents.blt(bitmap, sx, sy, pw, ph, x, y, size, size);
-        } else {
-            var sw;
-            var sh;
-            if ($gameSystem.isSideView()) {
-                bitmap = ImageManager.loadSvEnemy(target.battlerName());
-                sw = bitmap.width;
-                sh = bitmap.height;
-                //sw = bitmap.width / 9;
-                //sh = bitmap.height / 6;
-            } else {
-                bitmap = ImageManager.loadEnemy(
-                    target.battlerName(),
-                    target.battlerHue()
-                );
-                sw = bitmap.width;
-                sh = bitmap.height;
-            }
-            if (!bitmap.isReady()) {
-                if (redrawCallback) {
-                    bitmap.addLoadListener(redrawCallback);
-                }
-                return;
-            }
-            var dw = size; //this.contents.width/2 - 2;
-            var dh = sh * dw / Math.max(sw, 1);
-            this.contents.blt(bitmap, 0, 0, sw, sh, x, y, dw, dh);
+            sw = Window_Base._faceWidth;
+            sh = Window_Base._faceHeight;
+            sx = (faceIndex % 4) * sw;
+            sy = Math.floor(faceIndex / 4) * sh;
+            var actorHeight = height == null ? width : height;
+            destBitmap.blt(bitmap, sx, sy, sw, sh, x, y, width, actorHeight);
+            return true;
         }
+        var isSvEnemy =
+            $gameSystem.isSideView() &&
+            Imported.YEP_X_AnimatedSVEnemies &&
+            target.hasSVBattler() &&
+            Yanfly.Param.CTBEnemySVBattler;
+        if (isSvEnemy) {
+            bitmap = ImageManager.loadSvEnemy(target.battlerName());
+            sw = bitmap.width;
+            sh = bitmap.height;
+            //sw = bitmap.width / 9;
+            //sh = bitmap.height / 6;
+        } else {
+            bitmap = ImageManager.loadEnemy(target.battlerName(), target.battlerHue());
+            sw = bitmap.width;
+            sh = bitmap.height;
+        }
+        if (!bitmap.isReady()) {
+            if (redrawCallback) bitmap.addLoadListener(redrawCallback);
+            return false;
+        }
+        
+        if (sw <= 0 || sh <= 0) return false;
+        var dw = width;
+        var dh = sh * dw / sw;
+        var dx = x;
+        var dy = y;
+        // When a fixed bounding box is requested, preserve the image
+        // aspect ratio and fit the image inside that box.
+        if (height != null) {
+            var scale = Math.min(width / sw, height / sh);
+            dw = sw * scale;
+            dh = sh * scale;
+            dx = x + (width - dw) / 2;
+            // Keep landscape enemies aligned to the bottom, matching
+            // the existing connector-header layout.
+            dy = sw >= sh ? y + height - dh : y;
+        }
+        destBitmap.blt(bitmap, sx, sy, sw, sh, dx, dy, dw, dh);
+        return true;
     };
 
     Game_Battler.prototype.ctbActionIcon = function() {
         if (this.isEnemy() && !this.isCTBCharging()) return 0;
-        var action = this.itbActionPreview();
-        if (!action) action = this.currentAction();
+        var action = this.itbTimelineAction();
         if (!action || !action.item()) return 0;
         return action.item().iconIndex;
+    };
+
+    Game_Battler.prototype.itbTimelineAction = function() {
+        var action = this.itbActionPreview();
+        if (!action) action = this.currentAction();
+        if (!action) return null;
+        return action;
     };
 
     Sprite_Battler.prototype.createCTBIcon = function() {
@@ -1193,6 +1226,8 @@ window.Window_CTBTimeline = Window_CTBTimeline;
 
     var JAG_CTB_SceneBattle_createAllWindows = Scene_Battle.prototype.createAllWindows;
     Scene_Battle.prototype.createAllWindows = function() {
+        // Start loading the target background before it is first drawn.
+        ImageManager.loadSystem("TargetBoard");
         JAG_CTB_SceneBattle_createAllWindows.call(this);
         this.createITBTimelineWindow();
     };

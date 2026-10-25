@@ -77,7 +77,8 @@
             { id: "item", iconIndex: 176 },
             { id: "undo", iconIndex: 75 },
             { id: "finish", iconIndex: 87 },
-            { id: "preview", iconIndex: 245 }
+            { id: "preview", iconIndex: 245 },
+            { id: "sort", iconIndex: 189 }
         ];
     };
 
@@ -88,12 +89,16 @@
     BattleManager.ITB_UI.getDisciplineRows = function() {
         //console.log("Get Discipline Rows", this._actionMode);
         var actor = BattleManager.actor();
-        if (!actor) return [];
-        //var target = actor._connectorPreviewTarget || BattleManager.ITB_UI.getCurrentTarget();
-        if (this._actionMode === "items") {
-            rows = BattleManager.ITB_UI.getItemRows(actor);
-        } else {
-            rows = BattleManager.ITB_UI.getSkillRows(actor);
+        var rows = [];
+        if (actor) {
+            if (this._actionMode === "items") {
+                rows = BattleManager.ITB_UI.getItemRows(actor);
+            } else {
+                rows = BattleManager.ITB_UI.getSkillRows(actor);
+            }
+            if (this._sortActionsByAvailability) {
+                rows = this.sortDisciplineRowsByAvailability(actor, rows);
+            }
         }
         return rows;
     };
@@ -147,6 +152,49 @@
             image: BattleManager.ITB_UI.getDisciplineImage(key),
             actions: result[key]
         }));
+    };
+
+    BattleManager.ITB_UI.sortDisciplineRowsByAvailability = function(actor, rows) {
+        return rows.map(function(row) {
+            // Sort a copy so the original action order remains untouched.
+            var actions = row.actions.map(function(action, index) {
+                return {
+                    action: action,
+                    originalIndex: index,
+                    priority: BattleManager.ITB_UI.getActionSortPriority(actor, action)
+                };
+            });
+            actions.sort(function(a, b) {
+                // Sort by availability category first.
+                if (a.priority !== b.priority) return a.priority - b.priority;
+                // Preserve original order among actions with the same reason.
+                return a.originalIndex - b.originalIndex;
+            });
+            return {
+                discipline: row.discipline,
+                image: row.image,
+                actions: actions.map(function(entry) {
+                    return entry.action;
+                })
+            };
+        });
+    };
+
+    BattleManager.ITB_UI.getActionSortPriority = function(actor, actionData) {
+        var reason = this.getActionUnavailableReason(actor, actionData);
+        if (!reason) return 0;
+        switch (reason.type) {
+            case "queue_full":
+                return 1;
+            case "connector":
+                return 2;
+            case "scope":
+                return 3;
+            case "unusable":
+                return 4;
+            default:
+                return 5;
+        }
     };
 
     BattleManager.ITB_UI.setSelectedRow = function(row) {
@@ -312,15 +360,7 @@
                 target: target
             };
         }
-        // 3. Action queue is full.
-        var maxQueued = actor.maxQueuedActions();
-        if (actor.queueLength() >= maxQueued) {
-            return {
-                type: "queue_full",
-                max: maxQueued
-            };
-        }
-        // 4. Connector state is invalid.
+        // 3. Connector state is invalid.
         if (!this.isConnectorStateValid(item)) {
             var state = BattleManager.ITB_UI._connectorValidationState ||
                 BattleManager.connectorValidationState(actor);
@@ -350,6 +390,14 @@
                 type: "connector",
                 source: source ? source.type : null,
                 failures: failures
+            };
+        }
+        // 4. Action queue is full.
+        var maxQueued = actor.maxQueuedActions();
+        if (actor.queueLength() >= maxQueued) {
+            return {
+                type: "queue_full",
+                max: maxQueued
             };
         }
         return null;
@@ -481,8 +529,8 @@
         if (actor._connectorPreviewTarget) {
             return {
                 type: "target",
-                battler: actor._connectorPreviewTarget,
-                sprite: actor._connectorPreviewTargetSprite
+                battler: actor._connectorPreviewTarget//,
+                //sprite: actor._connectorPreviewTargetSprite
             };
         }
         return null;
@@ -879,6 +927,7 @@
     var ITB_Command_WAC_setup = Window_ActorCommand.prototype.setup;
     Window_ActorCommand.prototype.setup = function(actor) {
         console.log("Actor Command Setup", actor);
+        this._preserveActionState = !!actor && this._actor === actor && !!this._actionSprites;
         ITB_Command_WAC_setup.call(this, actor);
         this.clearCommandList();
         if (actor) this.initializeITBActionPanel();
@@ -893,13 +942,15 @@
         this.createContents();
         if (!this._actionSprites) this._actionSprites = [];
         if (!BattleManager.ITB_UI._actionMode) this.setActionMode("skills");
-        this._selection = {
-            region: undefined,
-            row: -1,
-            column: -1
-        };
+        if (!this._preserveActionState || !this._selection) {
+            this._selection = {
+                region: undefined,
+                row: -1,
+                column: -1
+            };
+            this._scrollRow = 0;
+        }
         this._hoverSelection = null;
-        this._scrollRow = 0;
         //this.createSelectionBorder();
         this.requestITBRefresh();
         //this.opacity = 0;
@@ -1089,6 +1140,13 @@
         });
     };
 
+    Window_ActorCommand.prototype.clearActionSelection = function() {
+        if (!this._selection || this._selection.region !== "actions") return;
+        this.hideITBActionWindow();
+        this._selection = {region: "commands", row: -1, column: -1};
+        this.clearSelectionHighlights();
+    };
+
     //--------------------------------------------------------------------------
     // UI update loop
     //--------------------------------------------------------------------------
@@ -1145,6 +1203,9 @@
                 case "preview":
                     this.togglePreviewWindow();
                     break;
+                case "sort":
+                    this.toggleActionSorting();
+                    break;
                 }
             }	
         }
@@ -1160,6 +1221,18 @@
             this.refreshITBActionPanel();
             this._needsRefresh = false;
         }
+        //if (!this._pendingActionPreview) return;
+        //if (!this.active || !this.visible) return;
+        // Consume the pending preview before restoring the selection.
+        /* var pending = this._pendingActionPreview;
+        this._pendingActionPreview = null;
+        this._selection = {
+            region: pending.region,
+            row: pending.row,
+            column: pending.column
+        }; */
+        // Highlight and preview only. Do not confirm the action.
+        //this.refreshSelection();
     };
 
     Window_ActorCommand.prototype.updateActorTracking = function() {
@@ -1331,10 +1404,10 @@
         //this.updateMouseSelection();
         this.updateMouseClick();
         //this.updateWheelInput();
-        if (Input.isRepeated("left")) this.cursorLeft();
-        if (Input.isRepeated("right")) this.cursorRight();
-        if (Input.isRepeated("up")) this.cursorUp();
-        if (Input.isRepeated("down")) this.cursorDown();
+        if (Input.isRepeated("left")) this.itbCursorLeft();
+        if (Input.isRepeated("right")) this.itbCursorRight();
+        if (Input.isRepeated("up")) this.itbCursorUp();
+        if (Input.isRepeated("down")) this.itbCursorDown();
         //if (Input.isTriggered("ok")) this.processITBOk();
         //if (TouchInput.isTriggered()) this.processITBOk();
         //this.refreshSelection();
@@ -1385,7 +1458,6 @@
     Window_ActorCommand.prototype.updateMouseClick = function() {
         //console.log("Update Mouse Click", TouchInput.isTriggered());
         if (!TouchInput.isTriggered()) return;
-        //var sprite = this.currentSelectionSprite();
         var x = TouchInput.x - this.x;
         var y = TouchInput.y - this.y;
         var sprite = this.hitTestActionSprite(x, y);
@@ -1393,7 +1465,49 @@
             console.log("CLICK: no selectable sprite");
             return;
         }
-        //console.log("CLICK: sprite region", sprite._uiData.region);
+        // Special handling during connector target preselection.
+        if (BattleManager._connectorTargetMode) {
+            // Commands can be used without confirming a target.
+            if (sprite._uiData.region === "commands") {
+                var command = sprite._uiData.command;
+                // These commands are not relevant during target preselection.
+                if (!command || command.id === "undo" || command.id === "finish") {
+                    return;
+                }
+                this.updateMouseSelection(sprite);
+                this.onCommandSelected(command);
+                return;
+            }
+            if (sprite._uiData.region !== "actions") return;
+            // An unavailable action may still be inspected when Preview is on,
+            // but it must not trigger target confirmation.
+            //if (BattleManager.ITB_UI.isActionUnavailable(sprite._uiData)) {
+            //    this.updateMouseSelection(sprite);
+            //    return;
+            //}
+            var scene = SceneManager._scene;
+            var targetWindow = scene.connectorTargetWindow();
+            if (!targetWindow) return;
+            var target = targetWindow === scene._actorWindow
+                ? targetWindow.actor()
+                : targetWindow.enemy();
+            if (!target) return;
+            // Store only the coordinates needed to restore the preview.
+            // This is separate from the normal selection and confirmation flow.
+            /* this._pendingActionPreview = {
+                region: sprite._uiData.region,
+                row: sprite._uiData.row,
+                column: sprite._uiData.column
+            }; */
+            // Confirm the currently highlighted target using the existing handler.
+            if (targetWindow === scene._actorWindow) {
+                scene.onActorOk();
+            } else {
+                scene.onEnemyOk();
+            }
+            this._pendingCommand = null;
+            return;
+        }
         // Commands: single-click selection
         if (sprite._uiData.region === "commands") {
             this.updateMouseSelection(sprite);
@@ -1413,7 +1527,7 @@
     // Cursor Functions
     //--------------------------------------------------------------------------
 
-    Window_ActorCommand.prototype.cursorLeft = function() {
+    Window_ActorCommand.prototype.itbCursorLeft = function() {
         //if (this.selectedRegion() === "actions") {
         var rows = BattleManager.ITB_UI.getDisciplineRows();
         if (!rows) return;
@@ -1447,7 +1561,7 @@
         this.refreshSelection();
     };
 
-    Window_ActorCommand.prototype.cursorRight = function() {
+    Window_ActorCommand.prototype.itbCursorRight = function() {
         if (this.selectedRegion() === "actions") {
             var rows = BattleManager.ITB_UI.getDisciplineRows();
             if (!rows) return;
@@ -1483,7 +1597,7 @@
         this.refreshSelection();
     };
 
-    Window_ActorCommand.prototype.cursorUp = function() {
+    Window_ActorCommand.prototype.itbCursorUp = function() {
         //console.log("CURSOR UP", this._selection.row, this._scrollRow);
         if (this.selectedRegion() === "actions") {
             var rows = BattleManager.ITB_UI.getDisciplineRows();
@@ -1543,7 +1657,7 @@
         this.refreshSelection();
     };
 
-    Window_ActorCommand.prototype.cursorDown = function() {
+    Window_ActorCommand.prototype.itbCursorDown = function() {
         //console.log("CURSOR DOWN", this._selection.row, this._scrollRow);
         if (this.selectedRegion() === "actions") {
             var rows = BattleManager.ITB_UI.getDisciplineRows();
@@ -1830,8 +1944,7 @@
     Window_ActorCommand.prototype.hitTestActionSprite = function(localX, localY) {
         for (var i = this._actionSprites.length - 1; i >= 0; i--) {
             var sprite = this._actionSprites[i];
-            if (!sprite._uiData) continue;
-            if (!sprite.visible) continue;
+            if (!sprite._uiData || !sprite.visible) continue;
             var left   = sprite.x;
             var top    = sprite.y;
             var right  = left + sprite.width;
@@ -1844,6 +1957,51 @@
             }
         }
         return null;
+    };
+
+    Window_ActorCommand.prototype.debugITBState = function(event, extra) {
+        if (!this._itbDebugLog) this._itbDebugLog = [];
+        var selected = this.currentSelectionSprite();
+        this._itbDebugLog.push({
+            event: event,
+            frame: Graphics.frameCount,
+            active: this.active,
+            scrollRow: this._scrollRow,
+            selection: this._selection ? {
+                region: this._selection.region,
+                row: this._selection.row,
+                column: this._selection.column
+            } : null,
+            selectedSprite: selected && selected._uiData ? {
+                region: selected._uiData.region,
+                row: selected._uiData.row,
+                column: selected._uiData.column,
+                actionId: selected._uiData.action
+                    ? selected._uiData.action.id
+                    : null,
+                actionName: selected._uiData.action
+                    ? selected._uiData.action.name
+                    : null,
+                x: selected.x,
+                y: selected.y,
+                scaleX: selected.scale.x,
+                scaleY: selected.scale.y
+            } : null,
+            visibleActions: this._actionSprites.map(function(sprite) {
+                var data = sprite._uiData;
+                var action = data && data.action;
+
+                return {
+                    row: data ? data.row : null,
+                    column: data ? data.column : null,
+                    actionId: action ? action.id : null,
+                    actionName: action ? action.name : null,
+                    x: sprite.x,
+                    y: sprite.y
+                };
+            }),
+            extra: extra || null
+        });
     };
 
     //--------------------------------------------------------------------------
@@ -1901,12 +2059,27 @@
     };
 
     //--------------------------------------------------------------------------
+    // Sort toggle wrapper
+    //--------------------------------------------------------------------------
+
+    Window_ActorCommand.prototype.toggleActionSorting = function() {
+        BattleManager.ITB_UI._sortActionsByAvailability =
+            !BattleManager.ITB_UI._sortActionsByAvailability;
+        //this.requestITBRefresh();
+    };
+
+    //--------------------------------------------------------------------------
     // Keep selection valid after switching mode
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.showActionsCommand = function(mode) {
         if (BattleManager.ITB_UI._actionMode === mode) return;
-        //console.log("Show actions", mode);
+        console.log("SHOW ACTIONS", {
+            mode: mode,
+            currentMode: BattleManager.ITB_UI._actionMode,
+            selection: this._selection,
+            scrollRow: this._scrollRow
+        });
         this.setActionMode(mode);
         this.clearITBActionSprites();
         this.requestITBRefresh();
@@ -1931,7 +2104,11 @@
 
     Window_ActorCommand.prototype.ensureSelectionVisible = function() {
         if (!this._selection || this._selection.row == null) return;
+        console.log(new Error().stack);
         var oldScroll = this._scrollRow;
+        var selectionRow = this._selection.row;
+        var visibleRows = this.visibleRows();
+        var maxScroll = this.maxScrollRow();
         if (this._selection.row < this._scrollRow) {
             this._scrollRow = this._selection.row;
         }
@@ -1939,6 +2116,26 @@
             this._scrollRow = this._selection.row - this.visibleRows() + 1;
         }
         this._scrollRow = Math.max(0, Math.min(this._scrollRow, this.maxScrollRow()));
+        if (oldScroll !== this._scrollRow) {
+            console.warn("[ITB scroll changed] ensureSelectionVisible", {
+                oldScrollRow: oldScroll,
+                newScrollRow: this._scrollRow,
+                selectionRow: selectionRow,
+                visibleRows: visibleRows,
+                maxScrollRow: maxScroll,
+                selectionRegion: this._selection.region,
+                selectionColumn: this._selection.column,
+                selectedAction: (function(window) {
+                    var sprite = window.currentSelectionSprite();
+                    var action = sprite && sprite._uiData
+                        ? sprite._uiData.action
+                        : null;
+                    return action
+                        ? { id: action.id, name: action.name }
+                        : null;
+                })(this)
+            });
+        }
         return oldScroll !== this._scrollRow;
     };
 
@@ -2244,8 +2441,8 @@
         var nameWidth = 150;
         this.drawActorName(actor, x, rect.y + 2, nameWidth);
         x += nameWidth + 2;
-        this.drawActorConnectors(actor, x, rect.y - 2);
-        x += this.connectorAreaWidth();
+        //this.drawActorConnectors(actor, x, rect.y - 2);
+        //x += this.connectorAreaWidth();
         this.drawStatusIcons(actor, x, rect.y + 2, rect.right - x);
     };
 
@@ -2696,7 +2893,7 @@
     // Update
     //--------------------------------------------------------------------------
 
-    var ITB_Command_WP_update = Window_Preview.prototype.update;
+    /* var ITB_Command_WP_update = Window_Preview.prototype.update;
     Window_Preview.prototype.update = function() {
         ITB_Command_WP_update.call(this);
         if (this._needsHeaderRefresh &&
@@ -2706,7 +2903,7 @@
                 this._needsHeaderRefresh = false;
                 this.refresh();
         }
-    };
+    }; */
 
     //--------------------------------------------------------------------------
     // Create badge sprites
@@ -4167,11 +4364,19 @@
     Window_Preview.prototype.drawHeaderBattlerIcon = function(bitmap, source) {
         var battler = source.battler;
         if (!battler) return;
-        if (battler.isActor()) {
-            this.drawHeaderActorFace(bitmap, battler);
-        } else {
-            this.drawHeaderEnemy(bitmap, source.sprite);
-        }
+        var redrawCallback = function() {
+            this.refresh();
+        }.bind(this);
+        this.drawActionIcon(bitmap, 16);
+        this.drawTargetMiniIconToBitmap(
+            battler,
+            bitmap,
+            0,
+            0,
+            bitmap.width,
+            bitmap.height,
+            redrawCallback
+        );
     };
 
     Window_Preview.prototype.drawConnectorTrack = function(row) {
@@ -4476,7 +4681,7 @@
     // Draw actor icon
     //--------------------------------------------------------------------------
 
-    Window_Preview.prototype.drawHeaderActorFace = function(bitmap, actor) {
+    /* Window_Preview.prototype.drawHeaderActorFace = function(bitmap, actor) {
         var faceBitmap = ImageManager.loadFace(actor.faceName());
         var pw = Window_Base._faceWidth;
         var ph = Window_Base._faceHeight;
@@ -4485,12 +4690,12 @@
         var sy = Math.floor(index / 4) * ph;
         bitmap.blt(faceBitmap, sx, sy, pw, ph, 0, 0, bitmap.width, bitmap.height);
     };
-
+ */
     //--------------------------------------------------------------------------
     // Draw enemy icon
     //--------------------------------------------------------------------------
 
-    Window_Preview.prototype.drawHeaderEnemy = function(destBitmap, sprite) {
+    /* Window_Preview.prototype.drawHeaderEnemy = function(destBitmap, sprite) {
         console.log("Draw Enemy Header");
         this.drawActionIcon(destBitmap, 16);
         sourceBitmap = sprite.bitmap;
@@ -4518,7 +4723,7 @@
             dw *= rate;
             dx += Math.floor((destBitmap.width - dw) / 2);
         }
-        /* console.log("Draw icon", destBitmap);
+        console.log("Draw icon", destBitmap);
         console.log(
             "Enemy bitmap:",
             destBitmap.width,
@@ -4537,9 +4742,9 @@
             dy,
             dw,
             dh
-        ); */
+        );
         destBitmap.blt(sourceBitmap, 0, 0, sw, sh, dx, dy, dw, dh);
-    };
+    }; */
 
     //--------------------------------------------------------------------------
     // Draw connector indicator
@@ -4934,17 +5139,6 @@
     Window_ITBAction.prototype.drawConnector = function() {
         var failures = this._reason.failures || [];
         console.log("=== ITB ACTION CONNECTOR DEBUG ===");
-        console.log("Reason:", this._reason);
-        console.log("Failures:", failures);
-        console.log("Failure count:", failures.length);
-        failures.forEach(function(failure, index) {
-            console.log(
-                "Failure " + index,
-                "discipline:", failure.discipline,
-                "state:", failure.state,
-                "row:", failure.row
-            );
-        });
         // One failure: show the specific requirement.
         if (failures.length === 1) {
             console.log("Single failure:", failures[0]);
@@ -5061,9 +5255,6 @@
     Window_ITBAction.prototype.getConnectorMessage = function(failure) {
         var failures = this._reason.failures || [];
         console.log("=== getConnectorMessage DEBUG ===");
-        console.log("Argument failure:", failure);
-        console.log("Reason failures:", failures);
-        console.log("Failure count:", failures.length);
         /*
         * Multiple failures:
         * If all failures are the same type, give a useful
@@ -5383,6 +5574,22 @@
 
     var ITB_Command_SB_update = Scene_Battle.prototype.update;
     Scene_Battle.prototype.update = function() {
+        var actorCommand = this._actorCommandWindow;
+        // Route clicks to the visible command UI during connector target
+        // preselection, even though the command window is inactive.
+        if (
+            BattleManager._connectorTargetMode &&
+            actorCommand &&
+            actorCommand.visible &&
+            TouchInput.isTriggered()
+        ) {
+            var x = TouchInput.x - actorCommand.x;
+            var y = TouchInput.y - actorCommand.y;
+            // Only intercept clicks within the actor command window.
+            if (x >= 0 && y >= 0 && x < actorCommand.width && y < actorCommand.height) {
+                actorCommand.updateMouseClick();
+            }
+        }
         ITB_Command_SB_update.call(this);
         //this.updateITBTargetBrowseState();
     //     // Use mouse wheel to toggle between actors in battle status window
@@ -5392,8 +5599,8 @@
     //     if (TouchInput.wheelY <= -20) {
     //         this.cycleStatusActor(-1);
     //     }
-        var actorCommand = this._actorCommandWindow;
         if (!actorCommand) return;
+        // Preserve existing action-row wheel scrolling.
         if (
             actorCommand.active ||
             (this._enemyWindow && this._enemyWindow.active) ||
@@ -5655,7 +5862,7 @@
     // Cache target image
     //--------------------------------------------------------------------------
 
-    Scene_Battle.prototype.CacheTargetImageExtension = function(target) {
+    /* Scene_Battle.prototype.CacheTargetImageExtension = function(target) {
         //console.log("Cache target image");
         //console.log("Target:", target);
         if (!target) return null;
@@ -5671,7 +5878,7 @@
         var sprite = new Sprite(image);
         sprite._isSvEnemy = isSvEnemy;
         return sprite;
-    }
+    } */
 
     //--------------------------------------------------------------------------
     // Process Cancel
@@ -5700,6 +5907,8 @@
             !actor._canUndoQueuedAction
         ) {
             scene.updatePreviewWindow(null, null);
+            var commandWindow = scene._actorCommandWindow;
+            if (commandWindow) commandWindow.clearActionSelection();
         }
     };
 
