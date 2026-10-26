@@ -1398,7 +1398,14 @@
     //--------------------------------------------------------------------------
 
     Window_ActorCommand.prototype.updateSelectionInput = function() {
-        if (!this.active) return;
+        if (!this.active) {
+            // An inactive command window should not retain an action selection
+            // or preview. If this causes issues in other UI flows later, restrict
+            // this cleanup to BattleManager._connectorTargetMode.
+            this.clearActionSelection();
+            this.updatePreviewWindow(null);
+            return;
+        }
         //if (TouchInput.isCancelled()) this.onCommandSelected("undo");
         this.updateScrollArrows();
         //this.updateMouseSelection();
@@ -1529,6 +1536,10 @@
 
     Window_ActorCommand.prototype.itbCursorLeft = function() {
         //if (this.selectedRegion() === "actions") {
+        if (this.selectedRegion() === "commands") {
+            this.moveITBCommandSelection(-1, 0);
+            return;
+        }
         var rows = BattleManager.ITB_UI.getDisciplineRows();
         if (!rows) return;
         var row = rows[this.selectedRow()];
@@ -1562,7 +1573,10 @@
     };
 
     Window_ActorCommand.prototype.itbCursorRight = function() {
-        if (this.selectedRegion() === "actions") {
+        if (this.selectedRegion() === "commands") {
+            this.moveITBCommandSelection(1, 0);
+            return;
+        } else if (this.selectedRegion() === "actions") {
             var rows = BattleManager.ITB_UI.getDisciplineRows();
             if (!rows) return;
             var row = rows[this.selectedRow()];
@@ -1598,8 +1612,11 @@
     };
 
     Window_ActorCommand.prototype.itbCursorUp = function() {
-        //console.log("CURSOR UP", this._selection.row, this._scrollRow);
-        if (this.selectedRegion() === "actions") {
+        //console.log("CURSOR UP", this._selection.row, this._scrollRow);     
+        if (this.selectedRegion() === "commands") {
+            this.moveITBCommandSelection(0, -1);
+            return;
+        } else if (this.selectedRegion() === "actions") {
             var rows = BattleManager.ITB_UI.getDisciplineRows();
             if (!rows) return;
             var row = this.selectedRow();
@@ -1659,7 +1676,10 @@
 
     Window_ActorCommand.prototype.itbCursorDown = function() {
         //console.log("CURSOR DOWN", this._selection.row, this._scrollRow);
-        if (this.selectedRegion() === "actions") {
+        if (this.selectedRegion() === "commands") {
+            this.moveITBCommandSelection(0, 1);
+            return;
+        } else if (this.selectedRegion() === "actions") {
             var rows = BattleManager.ITB_UI.getDisciplineRows();
             if (!rows) return;
             var row = this.selectedRow();
@@ -1716,6 +1736,27 @@
             }
         }
         if (this.ensureSelectionVisible()) this.requestITBRefresh();
+        this.hideITBActionWindow();
+        this.refreshSelection();
+    };
+
+    Window_ActorCommand.prototype.moveITBCommandSelection = function(dx, dy) {
+        var commands = BattleManager.ITB_UI.getMainCommands();
+        if (!commands || commands.length === 0) return;
+        var row = this.selectedRow();
+        var column = this.selectedColumn();
+        var newRow = row + dy;
+        var newColumn = column + dx;
+        var maxRow = Math.floor((commands.length - 1) / 2);
+        // Stay within the two-column command grid.
+        newRow = Math.max(0, Math.min(newRow, maxRow));
+        newColumn = Math.max(0, Math.min(newColumn, 1));
+        // Convert the destination row and column to the command index.
+        var index = newRow * 2 + newColumn;
+        // Do not select a nonexistent command.
+        if (index >= commands.length) return;
+        this._selection.row = newRow;
+        this._selection.column = newColumn;
         this.hideITBActionWindow();
         this.refreshSelection();
     };
@@ -2967,12 +3008,9 @@
             this.drawConnectorRows();
         }
         this.drawConnectorHeader();
-        if (!this._scopeFailure) {
-            this.layoutConnectorAxis();
-            this.drawConnectorAxis();
-        } else{
-            this.layoutConnectorHeaderX();
-        }
+        this.layoutConnectorAxis();
+        this.drawConnectorAxis();
+        if (this._scopeFailure) this.layoutConnectorHeaderX();
         this.drawSeparator();
         this.drawDescription();
         this.layoutBadges();
@@ -3064,7 +3102,7 @@
         this._header.validity.y = y + 4;
         this._header.inputIcon.y = y;
         if (this._scopeFailure) {
-            this._header.arrow.y = y + 4;
+            this._header.arrow.y = y - 8;
         } else {
             this._header.arrow.y = y + 8;
         }
@@ -3074,7 +3112,7 @@
 
     Window_Preview.prototype.layoutConnectorHeaderX = function() {
         if (this._scopeFailure) {
-            x = this.textPadding();
+            var x = this.textPadding() + 2;
         } else if (this._connectorLayout && this._connectorLayout.visibleTracks) {
             var x = this.connectorAxisX() - Window_Base._iconWidth / 2 + 1;
         } else {
@@ -3084,7 +3122,11 @@
         //console.log("Header Layout X", this._header.x);
         this._header.validity.x = x - Window_Base._iconWidth;
         this._header.inputIcon.x = x;
-        this._header.arrow.x = x + this.headerSpacing() + 6;
+        if (this._scopeFailure) {
+            this._header.arrow.x = x + this.headerSpacing() - 4;
+        } else {
+            this._header.arrow.x = x + this.headerSpacing() + 6;
+        }
         this._header.previewIcon.x = this._header.arrow.x + this.headerArrowSpacing();
         this._header.check.x = this._header.inputIcon.x + Window_Base._iconWidth + 4;
     };
@@ -3098,6 +3140,11 @@
 
     Window_Preview.prototype.layoutConnectorAxis = function() {
         if (!this._axisSprite) return;
+        this._axisSprite.visible = !!(!this._scopeFailure &&
+            this._connectorRows &&
+            this._connectorRows.some(function(row) {
+                return row.icon.visible;
+            }));
         var height = this.separatorHeight();
         if (!this._axisSprite.bitmap || this._axisSprite.bitmap.height !== height) {
             this._axisSprite.bitmap = new Bitmap(2, height);
@@ -4753,11 +4800,13 @@
     Window_Preview.prototype.drawConnectorAxis = function() {
         //var startY = this.headerY() + Window_Base._iconHeight + 8;
         //var endY = this.height - this.fittingHeight(1);
-        if (!this._connectorLayout || !this._connectorLayout.visibleTracks) return;
+        //if (!this._connectorLayout || !this._connectorLayout.visibleTracks) return;
         console.log("Draw connector axis");
+        if (!this._axisSprite || !this._axisSprite.bitmap) return;
         var bitmap = this._axisSprite.bitmap;
         //console.log("Height", bitmap.height);
         bitmap.clear();
+        if (!this._axisSprite.visible) return;
         var color = "rgba(237,180,130,0.9)";
         for (var y = 0; y < bitmap.height; y += 8) {
             bitmap.fillRect(0, y, 4, 4, color);
