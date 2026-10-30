@@ -154,7 +154,7 @@
         }
     };
 
-    DataManager.processConnectorEffectsNotetags = function(group) {
+    /* DataManager.processConnectorEffectsNotetags = function(group) {
         const regex = /<connectorEffects>([\s\S]*?)<\/connectorEffects>/i;
         for (const obj of group) {
             if (!obj || !obj.note) continue;
@@ -176,6 +176,45 @@
                     connector: connector,
                     value: value
                 });
+            }
+            if (DEBUG_CONNECTORS) console.log(obj.name, obj.connectorEffects);
+        }
+    }; */
+
+    DataManager.processConnectorEffectsNotetags = function(group) {
+        const regex = /<connectorEffects>([\s\S]*?)<\/connectorEffects>/i;
+        const lineRegex = /^(\w+)\s+(\w+)\s+([+-]?\d+(?:\.\d+)?)(?:\s*,\s*([+-]?\d+(?:\.\d+)?))?$/;
+        for (const obj of group) {
+            if (!obj || !obj.note) continue;
+            obj.connectorEffects = [];
+            const match = obj.note.match(regex);
+            if (!match) continue;
+            const lines = match[1]
+                .split(/[\r\n]+/)
+                .map(line => line.trim())
+                .filter(Boolean);
+            for (const line of lines) {
+                const parsed = line.match(lineRegex);
+                if (!parsed) continue;
+                const target = parsed[1].toLowerCase();
+                const connector = parsed[2].toLowerCase();
+                const value = Number(parsed[3]);
+                const hasSelectableRange = parsed[4] !== undefined;
+                const effect = {
+                    target: target,
+                    connector: connector,
+                    value: value,
+                    selectable: hasSelectableRange
+                };
+                if (hasSelectableRange) {
+                    const maxChange = Number(parsed[4]);
+                    // The first value is the initial value and lower bound.
+                    // The second value is the upper bound.
+                    if (maxChange < value) continue;
+                    effect.minChange = value;
+                    effect.maxChange = maxChange;
+                }
+                obj.connectorEffects.push(effect);
             }
             if (DEBUG_CONNECTORS) console.log(obj.name, obj.connectorEffects);
         }

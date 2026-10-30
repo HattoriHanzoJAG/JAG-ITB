@@ -3648,19 +3648,9 @@
         if (this._item.description) lines += this.descriptionTextLines().length;
         // States inflicted by this action
         lines += this.statePreviewLines();
-        if (this._item && this._item.selfState) lines += 1;
-        if (this._item && this._item.effects) {
-            this._item.effects.forEach(function(effect) {
-                if (
-                    effect.code !== Game_Action.EFFECT_ADD_STATE &&
-                    effect.code !== Game_Action.EFFECT_REMOVE_STATE
-                ) {
-                    return;
-                }
-                var state = $dataStates[effect.dataId];
-                if (state && state.name && state.iconIndex) lines += 1;
-            });
-        }
+        //if (this._item && this._item.selfState) lines += 1;
+        // Connector effects
+        lines += this.connectorEffectPreviewLines();
         return lines;
     };
 
@@ -3669,6 +3659,35 @@
         var state = $dataStates[this._item.selfState.stateId];
         if (!state) return 0;
         return 1;
+    };
+
+    Window_Preview.prototype.statePreviewLines = function() {
+        if (!this._item) return 0;
+        var lines = 0;
+        // Custom self-state
+        if (this._item.selfState) {
+            var state = $dataStates[this._item.selfState.stateId];
+            if (state) lines++;
+        }
+        // Database state effects
+        if (this._item.effects) {
+            this._item.effects.forEach(function(effect) {
+                if (
+                    effect.code !== Game_Action.EFFECT_ADD_STATE &&
+                    effect.code !== Game_Action.EFFECT_REMOVE_STATE
+                ) {
+                    return;
+                }
+                var state = $dataStates[effect.dataId];
+                if (state && state.name && state.iconIndex) lines++;
+            });
+        }
+        return lines;
+    };
+
+    Window_Preview.prototype.connectorEffectPreviewLines = function() {
+        if (!this._item || !this._item.connectorEffects) return 0;
+        return this._item.connectorEffects.length;
     };
 
     //--------------------------------------------------------------------------
@@ -3724,8 +3743,9 @@
             }, this);
             this.resetFontSettings();
         }
-        //this.drawStates((lines + 1) * this.lineHeight());
         this.drawStates((numLines + 1) * this.lineHeight());
+        y += this.statePreviewLines() * this.lineHeight();
+        this.drawConnectorEffects(y);
     };
 
     Window_Preview.prototype.drawScopeTarget = function(w) {
@@ -3756,12 +3776,12 @@
         this.drawTargetBackgroundAt(target, x, y, size, redrawCallback);
         size = 20;
         x = this.contentsWidth() - w + 4;
-        y = 9;
+        y = 11;
         if (target.isActor()) {
-            this.drawTargetMiniIconAt(target, x - 1, y + 3, size, redrawCallback);
+            this.drawTargetMiniIconAt(target, x, y + 3, size, redrawCallback);
         } else {
             //var dw = this.contentsWidth() / 2 - 2;
-            this.drawTargetMiniIconAt(target, x - 1, y, size, redrawCallback);
+            this.drawTargetMiniIconAt(target, x, y, size, redrawCallback);
         }
     };
 
@@ -3959,6 +3979,68 @@
         this.contents.fontSize = 14;
         this.changeTextColor("#F7E839");
         this.drawText(String(offset), x, y + 1, size, "center");
+        this.resetFontSettings();
+    };
+
+    //--------------------------------------------------------------------------
+    // Draw connector effect helpers
+    //--------------------------------------------------------------------------
+
+    Window_Preview.prototype.drawConnectorEffects = function(y) {
+        if (!this._item || !this._item.connectorEffects) return;
+        var selfEffects = [];
+        var targetEffects = [];
+        this._item.connectorEffects.forEach(function(effect) {
+            if (effect.target === "self") {
+                selfEffects.push(effect);
+            } else if (effect.target === "target") {
+                targetEffects.push(effect);
+            }
+        });
+        var x = this.separatorX() + this.separatorMargin();
+        var rowHeight = this.lineHeight();
+        var labelWidth = 75;
+        // Self effects
+        selfEffects.forEach(function(effect, index) {
+            if (index === 0) {
+                this.contents.fontSize = 20;
+                this.changeTextColor(this.textColor(6));
+                this.drawText("Self:", x, y, labelWidth);
+            }
+            this.drawConnectorEffect(effect, x + labelWidth, y);
+            y += rowHeight;
+        }, this);
+        // Target effects
+        targetEffects.forEach(function(effect, index) {
+            if (index === 0) {
+                this.contents.fontSize = 20;
+                this.changeTextColor(this.textColor(6));
+                this.drawText("Target:", x, y, labelWidth);
+            }
+            this.drawConnectorEffect(effect, x + labelWidth, y);
+            y += rowHeight;
+        }, this);
+        this.resetFontSettings();
+    };
+
+    Window_Preview.prototype.drawConnectorEffect = function(effect, x, y) {
+        var definition = DataManager.getConnectorDefinition(effect.connector);
+        if (!definition) return;
+        var iconSize = 28;
+        var spacing = 8;
+        var image = BattleManager.ITB_UI.getDisciplineImage(
+            definition.discipline
+        );
+        this.drawSystemImage(image, x, y + 2, iconSize);
+        var value = Number(effect.value);
+        var text = (value > 0 ? "+" : "") + String(value);
+        this.contents.fontSize = 20;
+        this.changeTextColor(
+            value > 0 ? this.textColor(24) :
+            value < 0 ? this.textColor(18) :
+            this.normalColor()
+        );
+        this.drawText(text, x + iconSize + spacing, y, 60, "left");
         this.resetFontSettings();
     };
 
@@ -4415,15 +4497,12 @@
             this.refresh();
         }.bind(this);
         this.drawActionIcon(bitmap, 16);
-        this.drawTargetMiniIconToBitmap(
-            battler,
-            bitmap,
-            0,
-            0,
-            bitmap.width,
-            bitmap.height,
-            redrawCallback
-        );
+        var scale = 0.9;
+        var width = bitmap.width * scale;
+        var height = bitmap.height * scale;
+        var x = (bitmap.width - width) / 2;
+        var y = (bitmap.height - height) / 2;
+        this.drawTargetMiniIconToBitmap(battler, bitmap, x, y, width, height, redrawCallback);
     };
 
     Window_Preview.prototype.drawConnectorTrack = function(row) {
