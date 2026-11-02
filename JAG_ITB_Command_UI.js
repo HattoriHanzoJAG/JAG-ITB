@@ -2865,6 +2865,7 @@
 
     Window_Preview.prototype = Object.create(Window_Base.prototype);
     Window_Preview.prototype.constructor = Window_Preview;
+    window.Window_Preview = Window_Preview;
 
     //--------------------------------------------------------------------------
     // Preview type window
@@ -3066,11 +3067,11 @@
         //    this._badges.aether.y
         //);
         this._badges.aether.x = -2;
-        this._badges.aether.y = topY - 2;
+        this._badges.aether.y = topY - 6;
         this._badges.initiative.x = this.width / 2 - 24;
         this._badges.initiative.y = topY - 8;
         this._badges.stamina.x = this.width - 46;
-        this._badges.stamina.y = topY;
+        this._badges.stamina.y = topY - 4;
         this._badges.defense.x = -6;
         this._badges.defense.y = bottomY - 10;
         this._badges.defiance.x = -6;
@@ -3643,7 +3644,7 @@
 
     Window_Preview.prototype.descriptionLines = function() {
         if (!this._item) return 0;
-        var lines = 0;
+        var lines = 1.25;
         // Database description
         if (this._item.description) lines += this.descriptionTextLines().length;
         // States inflicted by this action
@@ -3743,7 +3744,8 @@
             }, this);
             this.resetFontSettings();
         }
-        this.drawStates((numLines + 1) * this.lineHeight());
+        y = (numLines + 1) * this.lineHeight();
+        this.drawStates(y);
         y += this.statePreviewLines() * this.lineHeight();
         this.drawConnectorEffects(y);
     };
@@ -4028,11 +4030,9 @@
         if (!definition) return;
         var iconSize = 28;
         var spacing = 8;
-        var image = BattleManager.ITB_UI.getDisciplineImage(
-            definition.discipline
-        );
+        var image = BattleManager.ITB_UI.getDisciplineImage(definition.discipline);
         this.drawSystemImage(image, x, y + 2, iconSize);
-        var value = Number(effect.value);
+        var value = Number(this.connectorEffectDisplayValue(effect));
         var text = (value > 0 ? "+" : "") + String(value);
         this.contents.fontSize = 20;
         this.changeTextColor(
@@ -5657,6 +5657,14 @@
         var width = size || bitmap.width;
         var height = size || bitmap.height;
         this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x, y, width, height);
+    };
+
+    //--------------------------------------------------------------------------
+    // Connector effect display value
+    //--------------------------------------------------------------------------
+
+    Window_Base.prototype.connectorEffectDisplayValue = function(effect) {
+        return effect.value;
     };
 
     //==========================================================================
