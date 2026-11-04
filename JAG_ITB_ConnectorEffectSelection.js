@@ -41,6 +41,22 @@
     var Window_Preview = window.Window_Preview;
     var Window_ITBTargetConnectors = window.Window_ITBTargetConnectors;
 
+    //=========================================================================
+    // TouchInput
+    //=========================================================================
+
+    /* var CES_TI_onMouseMove = TouchInput._onMouseMove;
+    TouchInput._onMouseMove = function(event) {
+        CES_TI_onMouseMove.call(this, event);
+        // RPG Maker MV normally updates the mouse position only while pressed.
+        // Also update it during ordinary mouse movement for hover selection.
+        var scene = SceneManager._scene;
+        var selector = scene && scene._connectorEffectSelectorWindow;
+        if (selector && selector.visible && !this._mousePressed) {
+            this._onMove(event.pageX, event.pageY);
+        }
+    }; */
+
     //==========================================================================
     // Scene_Battle
     //==========================================================================
@@ -75,7 +91,7 @@
     };
 
     Scene_Battle.prototype.updateConnectorEffectSelector = function() {
-        var track = this.connectorEffectTrackAtPointer();
+        /* var track = this.connectorEffectTrackAtPointer();
         if (!track) {
             this.clearConnectorEffectSelector();
             return;
@@ -85,7 +101,19 @@
             track.hostWindow,
             track.x,
             track.y
-        );
+        ); */
+        var selector = this._connectorEffectSelectorWindow;
+        if (!selector) return;
+        var tracks = (this._connectorEffectTracks || []).filter(function(track) {
+            return track.hostWindow && track.hostWindow.visible;
+        });
+        selector.setTracks(tracks);
+        if (tracks.length > 0) {
+            selector.show();
+            if (!selector.active) selector.activate();
+        } else {
+            this.clearConnectorEffectSelector();
+        }
     };
 
     //--------------------------------------------------------------------------
@@ -102,7 +130,7 @@
     // Connector effect selector assignment
     //--------------------------------------------------------------------------
 
-    Scene_Battle.prototype.setConnectorEffectSelector = function(effect, hostWindow, gaugeX, gaugeY) {
+    /* Scene_Battle.prototype.setConnectorEffectSelector = function(effect, hostWindow, gaugeX, gaugeY) {
         var selector = this._connectorEffectSelectorWindow;
         if (!selector || !effect || !hostWindow) return;
         selector.setEffect(effect);
@@ -112,21 +140,21 @@
         selector.show();
         selector.activate();
         this.updateConnectorEffectSelectorPosition();
-    };
+    }; */
 
     //--------------------------------------------------------------------------
     // Connector effect selector position
     //--------------------------------------------------------------------------
 
-    var CES_SB_updateWindowPositions = Scene_Battle.prototype.updateWindowPositions;
+    /* var CES_SB_updateWindowPositions = Scene_Battle.prototype.updateWindowPositions;
     Scene_Battle.prototype.updateWindowPositions = function() {
         CES_SB_updateWindowPositions.call(this);
         if (this._connectorEffectSelectorWindow) {
             this.updateConnectorEffectSelectorPosition();
         }
-    };
+    }; */
 
-    Scene_Battle.prototype.updateConnectorEffectSelectorPosition = function() {
+    /* Scene_Battle.prototype.updateConnectorEffectSelectorPosition = function() {
         var selector = this._connectorEffectSelectorWindow;
         var hostWindow = this._connectorEffectSelectorHostWindow;
         if (!selector || !hostWindow) return;
@@ -146,7 +174,7 @@
             this._connectorEffectSelectorGaugeY -
             selector.gaugeY();
         selector.move(x, y, selector.windowWidth(), selector.windowHeight());
-    };
+    }; */
 
     //--------------------------------------------------------------------------
     // Ensure selector is above the target connector window
@@ -167,12 +195,12 @@
     Scene_Battle.prototype.clearConnectorEffectSelector = function() {
         var selector = this._connectorEffectSelectorWindow;
         if (!selector) return;
+        selector.setTracks([]);
         selector.deactivate();
         selector.hide();
-        //selector.setEffect(null);
-        this._connectorEffectSelectorHostWindow = null;
-        this._connectorEffectSelectorGaugeX = 0;
-        this._connectorEffectSelectorGaugeY = 0;
+        //this._connectorEffectSelectorHostWindow = null;
+        //this._connectorEffectSelectorGaugeX = 0;
+        //this._connectorEffectSelectorGaugeY = 0;
     };
 
     //--------------------------------------------------------------------------
@@ -214,7 +242,7 @@
     // Find connector effect track under pointer
     //--------------------------------------------------------------------------
 
-    Scene_Battle.prototype.connectorEffectTrackAtPointer = function() {
+    /* Scene_Battle.prototype.connectorEffectTrackAtPointer = function() {
         var tracks = this._connectorEffectTracks || [];
         var pointerX = TouchInput.x;
         var pointerY = TouchInput.y;
@@ -234,7 +262,7 @@
             }
         }
         return null;
-    };
+    }; */
 
     //=========================================================================
     // Window_ConnectorEffectSelector
@@ -253,13 +281,15 @@
     //--------------------------------------------------------------------------
 
     Window_ConnectorEffectSelector.prototype.initialize = function() {
+        this._tracks = [];
+        this._effect = null;
+        this._hostWindow = null;
+        //this._lastPointerX = null;
+        //this._lastPointerY = null;
+        this._value = 0;
         Window_Selectable.prototype.initialize.call(
             this, 0, 0, this.windowWidth(), this.windowHeight()
         );
-        this._effect = null;
-        this._lastPointerX = null;
-        this._lastPointerY = null;
-        this._value = 0;
         this.opacity = 0;
         this.backOpacity = 0;
         this.contentsOpacity = 0;
@@ -280,6 +310,25 @@
         return 50;
     };
 
+    Window_ConnectorEffectSelector.prototype.setTracks = function(tracks) {
+        this._tracks = tracks || [];
+        var index = this.index();
+        if (index < 0) return;
+        if (index >= this._tracks.length) {
+            this.select(-1);
+            return;
+        }
+        var track = this._tracks[index];
+        if (
+            this._effect !== track.effect ||
+            this._hostWindow !== track.hostWindow
+        ) {
+            this.select(index);
+        } else {
+            this.updateTrackPosition(track);
+        }
+    };
+
     //--------------------------------------------------------------------------
     // Update
     //--------------------------------------------------------------------------
@@ -296,6 +345,7 @@
     //--------------------------------------------------------------------------
 
     Window_ConnectorEffectSelector.prototype.refresh = function() {
+        if (!this._selectionArrow) return;
         if (!this._effect) {
             this._selectionArrow.visible = false;
             return;
@@ -322,6 +372,20 @@
     };
 
     //--------------------------------------------------------------------------
+    // Selection
+    //--------------------------------------------------------------------------
+
+    Window_ConnectorEffectSelector.prototype.select = function(index) {
+        var track = this._tracks[index] || null;
+        this._effect = track ? track.effect : null;
+        this._hostWindow = track ? track.hostWindow : null;
+        this._value = track ? Number(track.effect.value) : 0;
+        Window_Selectable.prototype.select.call(this, track ? index : -1);
+        if (track) this.updateTrackPosition(track);
+        this.refresh();
+    };
+
+    //--------------------------------------------------------------------------
     // Correct selection arrow coordinates
     //--------------------------------------------------------------------------
 
@@ -329,6 +393,13 @@
         if (!this._selectionArrow) return;
         this._selectionArrow.x = this.x + this.gaugeX() + this.gaugeWidth() * this.selectionRate();
         this._selectionArrow.y = this.y + this.gaugeY() - 8;
+        /* console.log("Marker position:", {
+            value: this._value,
+            rate: this.selectionRate(),
+            selectorX: this.x,
+            gaugeX: this.gaugeX(),
+            markerX: this._selectionArrow.x
+        }); */
     };
 
     Window_ConnectorEffectSelector.prototype.selectionRate = function() {
@@ -344,7 +415,7 @@
     // Effect assignment
     //--------------------------------------------------------------------------
 
-    Window_ConnectorEffectSelector.prototype.setEffect = function(effect) {
+    /* Window_ConnectorEffectSelector.prototype.setEffect = function(effect) {
         if (this._effect === effect) return;
         this._effect = effect || null;
         this._lastPointerX = null;
@@ -357,7 +428,7 @@
             this.deselect();
         }
         this.refresh();
-    };
+    }; */
 
     Window_ConnectorEffectSelector.prototype.effect = function() {
         return this._effect;
@@ -372,7 +443,8 @@
     //--------------------------------------------------------------------------
 
     Window_ConnectorEffectSelector.prototype.maxItems = function() {
-        return this._effect ? 1 : 0;
+        return this._tracks.length;
+        //return this._effect ? 1 : 0;
     };
 
     Window_ConnectorEffectSelector.prototype.updateCursor = function() {
@@ -417,12 +489,66 @@
     //--------------------------------------------------------------------------
 
     Window_ConnectorEffectSelector.prototype.processTouch = function() {
-        // Pointer handling is performed by updatePointerSelection().
+        if (!this.isOpenAndActive()) return;
+        // Mouse click and drag selection.
+        if (TouchInput.isTriggered() || TouchInput.isPressed()) {
+            var clickedIndex = this.getClickedTrack();
+            if (clickedIndex >= 0) {
+                if (this.index() !== clickedIndex) {
+                    SoundManager.playCursor();
+                    this.select(clickedIndex);
+                }
+                this.updateValueFromPointer(TouchInput.x, TouchInput.y);
+            }
+        }
+        // Mouse hover selection.
+        var hoveredIndex = this.getMouseOverTrack();
+        if (hoveredIndex >= 0 && this.index() !== hoveredIndex) {
+            SoundManager.playCursor();
+            this.select(hoveredIndex);
+        }
     };
+
+    Window_ConnectorEffectSelector.prototype.getClickedTrack = function() {
+        return this.getTrackAtPointer(TouchInput.x, TouchInput.y);
+    };
+
+    Window_ConnectorEffectSelector.prototype.getMouseOverTrack = function() {
+        return this.getTrackAtPointer(TouchInput._mouseOverX, TouchInput._mouseOverY);
+    };
+
+    Window_ConnectorEffectSelector.prototype.getTrackAtPointer = function(x, y) {
+        if (!isFinite(x) || !isFinite(y)) return -1;
+        for (var i = 0; i < this._tracks.length; i++) {
+            var track = this._tracks[i];
+            var host = track.hostWindow;
+            if (!host || !host.visible) continue;
+            var trackX = host.x + host.padding + track.x;
+            var trackY = host.y + host.padding + track.y;
+            if (
+                x >= trackX &&
+                x <= trackX + track.width &&
+                y >= trackY - 8 &&
+                y <= trackY + 18
+            ) {
+                return i;
+            }
+        }
+        return -1;
+    };
+
+    //--------------------------------------------------------------------------
+    // Value selection
+    //--------------------------------------------------------------------------
 
     Window_ConnectorEffectSelector.prototype.updatePointerSelection = function() {
         if (!this.active || !this.visible || !this._effect) return;
-        if (TouchInput.x === this._lastPointerX && TouchInput.y === this._lastPointerY) {
+        //console.log(
+        //    "Pointer:", TouchInput._mouseOverX, TouchInput._mouseOverY,
+        //    "Value:", this._value
+        //);
+        this.updateValueFromPointer(TouchInput._mouseOverX, TouchInput._mouseOverY);
+        /* if (TouchInput.x === this._lastPointerX && TouchInput.y === this._lastPointerY) {
             return;
         }
         this._lastPointerX = TouchInput.x;
@@ -445,6 +571,41 @@
         var min = Number(this._effect.minChange);
         var max = Number(this._effect.maxChange);
         var value = Math.round(min + rate * (max - min));
+        this.setValue(value); */
+    };
+
+    Window_ConnectorEffectSelector.prototype.updateValueFromPointer = function(x, y) {
+        var track = this._tracks[this.index()];
+        if (!track || !this._effect) return;
+        if (!isFinite(x) || !isFinite(y)) return;
+        var host = track.hostWindow;
+        if (!host || !host.visible) return;
+        var trackX = host.x + host.padding + track.x;
+        var trackY = host.y + host.padding + track.y;
+        // console.log("Track geometry:", {
+        //     pointerX: x,
+        //     pointerY: y,
+        //     trackX: trackX,
+        //     trackY: trackY,
+        //     width: track.width,
+        //     min: this._effect.minChange,
+        //     max: this._effect.maxChange
+        // });
+        if (
+            x < trackX ||
+            x > trackX + track.width ||
+            y < trackY - 8 ||
+            y > trackY + 18
+        ) {
+            return;
+        }
+        var rate = (x - trackX) / track.width;
+        rate = Math.max(0, Math.min(1, rate));
+        //console.log("Calculated rate:", rate);
+        var min = Number(this._effect.minChange);
+        var max = Number(this._effect.maxChange);
+        var value = Math.round(min + rate * (max - min));
+        //console.log("Calculated value:", value);
         this.setValue(value);
     };
 
@@ -486,6 +647,26 @@
             scene._previewWindow.parent.addChild(this._selectionArrow);
         }
         //this.addChild(this._selectionArrow);
+    };
+
+    //--------------------------------------------------------------------------
+    // Align selection marker with track
+    //--------------------------------------------------------------------------
+
+    Window_ConnectorEffectSelector.prototype.updateTrackPosition = function(track) {
+        var hostWindow = track.hostWindow;
+        if (!hostWindow || !hostWindow.visible) return;
+        var x =
+            hostWindow.x +
+            hostWindow.padding +
+            track.x -
+            this.gaugeX();
+        var y =
+            hostWindow.y +
+            hostWindow.padding +
+            track.y -
+            this.gaugeY();
+        this.move(x, y, this.windowWidth(), this.windowHeight());
     };
 
     //=========================================================================
