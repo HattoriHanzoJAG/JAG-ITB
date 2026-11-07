@@ -58,6 +58,50 @@
     }; */
 
     //==========================================================================
+    // BattleManager
+    //==========================================================================
+
+    var CES_BM_setup = BattleManager.setup;
+    BattleManager.setup = function(troopId, canEscape, canLose) {
+        CES_BM_setup.call(this, troopId, canEscape, canLose);
+        DataManager.processConnectorEffectsNotetags($dataSkills);
+        DataManager.processConnectorEffectsNotetags($dataItems);
+    };
+
+    //==========================================================================
+    // Game_Action
+    //==========================================================================
+
+    var CES_GA_createQueueData = Game_Action.prototype.createQueueData;
+    Game_Action.prototype.createQueueData = function() {
+        var data = CES_GA_createQueueData.call(this);
+        if (!data) return data;
+        var item = this.item();
+        data.connectorEffects = JsonEx.makeDeepCopy(
+            item && item.connectorEffects ? item.connectorEffects : []
+        );
+        return data;
+    };
+
+    Game_Action.prototype.connectorEffects = function() {
+        var item = this.item();
+        return this._connectorEffects || (item ? item.connectorEffects : null);
+    };
+
+    //==========================================================================
+    // Game_Battler
+    //==========================================================================
+
+    var CES_GB_createActionFromQueueData = Game_Battler.prototype.createActionFromQueueData;
+    Game_Battler.prototype.createActionFromQueueData = function(data) {
+        var action = CES_GB_createActionFromQueueData.call(this, data);
+        if (action && data.connectorEffects) {
+            action._connectorEffects = JsonEx.makeDeepCopy(data.connectorEffects);
+        }
+        return action;
+    };
+
+    //==========================================================================
     // Scene_Battle
     //==========================================================================
 
@@ -104,6 +148,12 @@
         ); */
         var selector = this._connectorEffectSelectorWindow;
         if (!selector) return;
+        if (this._connectorEffectSelectionLocked) {
+            if (selector.visible || selector.active) {
+                this.clearConnectorEffectSelector();
+            }
+            return;
+        }
         var tracks = (this._connectorEffectTracks || []).filter(function(track) {
             return track.hostWindow && track.hostWindow.visible;
         });
@@ -121,6 +171,9 @@
     //--------------------------------------------------------------------------
 
     Scene_Battle.prototype.createConnectorEffectSelectorWindow = function() {
+        this._connectorEffectSelectionLocked = false;
+        this._connectorEffectTracks = [];
+        this._connectorEffectHostWindows = [];
         this._connectorEffectSelectorWindow = new Window_ConnectorEffectSelector();
         this.addWindow(this._connectorEffectSelectorWindow);
         this._connectorEffectSelectorWindow.hide();
@@ -229,6 +282,7 @@
 
     Scene_Battle.prototype.registerConnectorEffectTrack = function(effect, hostWindow, x, y, width) {
         if (!this._connectorEffectTracks) this._connectorEffectTracks = [];
+        if (!this._connectorEffectHostWindows) this._connectorEffectHostWindows = [];
         this._connectorEffectTracks.push({
             effect: effect,
             hostWindow: hostWindow,
@@ -236,6 +290,9 @@
             y: y,
             width: width
         });
+        if (this._connectorEffectHostWindows.indexOf(hostWindow) < 0) {
+            this._connectorEffectHostWindows.push(hostWindow);
+        }
     };
 
     //--------------------------------------------------------------------------
@@ -263,6 +320,90 @@
         }
         return null;
     }; */
+
+    //--------------------------------------------------------------------------
+    // Selector lock
+    //--------------------------------------------------------------------------
+
+    var CES_SB_queueConnectorAction = Scene_Battle.prototype.queueConnectorAction;
+    Scene_Battle.prototype.queueConnectorAction = function(actor, action) {
+        var previousLength = actor ? actor.queueLength() : 0;
+        CES_SB_queueConnectorAction.call(this, actor, action);
+        if (!actor) return;
+        if (actor.queueLength() >= actor.maxQueuedActions()) {
+            this.lockConnectorEffectSelection();
+        } else if (actor.queueLength() < previousLength) {
+            this.unlockConnectorEffectSelection();
+        }
+    };
+
+    Scene_Battle.prototype.lockConnectorEffectSelection = function() {
+        if (this._connectorEffectSelectionLocked) return;
+        this._connectorEffectSelectionLocked = true;
+        var hostWindows = this._connectorEffectHostWindows;
+        if (!hostWindows) {
+            hostWindows = [];
+            this._connectorEffectHostWindows = hostWindows;
+        }
+        (this._connectorEffectTracks || []).forEach(function(track) {
+            var hostWindow = track.hostWindow;
+            if (hostWindow && hostWindows.indexOf(hostWindow) < 0) {
+                hostWindows.push(hostWindow);
+            }
+        });
+        /* var selector = this._connectorEffectSelectorWindow;
+        if (selector) {
+            selector.deactivate();
+            selector.hide();
+        } */
+        this.clearConnectorEffectSelector();
+        this.refreshConnectorEffectHostWindows();
+    };
+
+    Scene_Battle.prototype.unlockConnectorEffectSelection = function() {
+        if (!this._connectorEffectSelectionLocked) return;
+        this._connectorEffectSelectionLocked = false;
+        this.refreshConnectorEffectHostWindows();
+        this.updateConnectorEffectSelector();
+    };
+
+    Scene_Battle.prototype.refreshConnectorEffectHostWindows = function() {
+        var windows = this._connectorEffectHostWindows || [];
+        windows.forEach(function(hostWindow) {
+            if (hostWindow && hostWindow.refresh) hostWindow.refresh();
+        });
+        /* if (this._previewWindow && this._previewWindow._data) {
+            this._previewWindow.refresh();
+        }
+        var targetWindow = this._itbTargetConnectorWindow;
+        if (targetWindow && targetWindow._target) targetWindow.refresh(); */
+    };
+
+    //--------------------------------------------------------------------------
+    // Unlock after undo
+    //--------------------------------------------------------------------------
+
+    var SEC_BM_selectPreviousCommand = BattleManager.selectPreviousCommand;
+    BattleManager.selectPreviousCommand = function() {
+        var actor = this._actor || BattleManager.actor();
+        SEC_BM_selectPreviousCommand.call(this);
+        if (actor && actor.queueLength() < actor.maxQueuedActions()) {
+            var scene = SceneManager._scene;
+            if (scene && scene.unlockConnectorEffectSelection) {
+                scene.unlockConnectorEffectSelection();
+            }
+        }
+    };
+
+    //--------------------------------------------------------------------------
+    // Unlock after finishing action queue
+    //--------------------------------------------------------------------------
+
+    var CES_SB_finishActionQueue = Scene_Battle.prototype.finishActionQueue;
+    Scene_Battle.prototype.finishActionQueue = function() {
+        CES_SB_finishActionQueue.call(this);
+        this.unlockConnectorEffectSelection();
+    };
 
     //=========================================================================
     // Window_ConnectorEffectSelector
@@ -313,19 +454,22 @@
     Window_ConnectorEffectSelector.prototype.setTracks = function(tracks) {
         this._tracks = tracks || [];
         var index = this.index();
-        if (index < 0) return;
-        if (index >= this._tracks.length) {
-            this.select(-1);
-            return;
-        }
-        var track = this._tracks[index];
-        if (
-            this._effect !== track.effect ||
-            this._hostWindow !== track.hostWindow
-        ) {
-            this.select(index);
+        if (index < 0) {
+            if (this._tracks.length > 0) this.select(0);
         } else {
-            this.updateTrackPosition(track);
+            if (index >= this._tracks.length) {
+                this.select(-1);
+            } else {
+                var track = this._tracks[index];
+                if (
+                    this._effect !== track.effect ||
+                    this._hostWindow !== track.hostWindow
+                ) {
+                    this.select(index);
+                } else {
+                    this.updateTrackPosition(track);
+                }
+            }
         }
     };
 
@@ -456,6 +600,10 @@
     //--------------------------------------------------------------------------
 
     Window_ConnectorEffectSelector.prototype.setValue = function(value) {
+        var scene = SceneManager._scene;
+        if (scene instanceof Scene_Battle && scene._connectorEffectSelectionLocked) {
+            return;
+        } 
         if (!this._effect) return;
         var min = Number(this._effect.minChange);
         var max = Number(this._effect.maxChange);
@@ -464,6 +612,11 @@
         value = Math.max(min, Math.min(max, value));
         if (value === this._value) return;
         this._value = value;
+        this._effect.value = value;
+        SoundManager.playCursor();
+        if (scene instanceof Scene_Battle && scene.refreshConnectorEffectHostWindows) {
+            scene.refreshConnectorEffectHostWindows();
+        }
         this.refresh();
     };
 
@@ -504,7 +657,7 @@
         // Mouse hover selection.
         var hoveredIndex = this.getMouseOverTrack();
         if (hoveredIndex >= 0 && this.index() !== hoveredIndex) {
-            SoundManager.playCursor();
+            //SoundManager.playCursor();
             this.select(hoveredIndex);
         }
     };
@@ -693,6 +846,10 @@
     //--------------------------------------------------------------------------
 
     Window_Base.prototype.drawConnectorEffectTrack = function(effect, x, y, width) {
+        var scene = SceneManager._scene;
+        if (scene instanceof Scene_Battle && scene._connectorEffectSelectionLocked) {
+            return;
+        }
         var min = Number(effect.minChange);
         var max = Number(effect.maxChange);
         if (!isFinite(min) || !isFinite(max) || max <= min) return;
@@ -704,11 +861,7 @@
         this.changeTextColor(this.textColor(24));
         this.drawText(String(max), x + width - 31, y + 2, 35, "right");
         this.resetFontSettings();
-        var scene = SceneManager._scene;
-        if (
-            scene instanceof Scene_Battle &&
-            scene.registerConnectorEffectTrack
-        ) {
+        if (scene instanceof Scene_Battle && scene.registerConnectorEffectTrack) {
             scene.registerConnectorEffectTrack(effect, this, x, y, width);
         }
     };

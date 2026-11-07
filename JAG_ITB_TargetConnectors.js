@@ -384,7 +384,7 @@
         if (actor && actor._connectorPreviewTarget) target = actor._connectorPreviewTarget;
         // Update the target information as usual.
         window.updateTarget(target);
-        // During action execution, check the acting actor's queue first.
+        /* // During action execution, check the acting actor's queue first.
         if (actor && actor.queueLength && actor.queueLength() > 0) {
             // Hide the connector information while queued actions remain.
             window.hide();
@@ -392,6 +392,12 @@
             // The queue is empty again; restore the information for this target.
             window.show();
             window.open();
+        } */
+        if (target && window._target === target && window._connectorEntries.length > 0) {
+            window.show();
+            window.open();
+        } else {
+            window.hide();
         }
         if (window.visible) window.updatePosition();
         // Keep the selection arrow independent of the information window.

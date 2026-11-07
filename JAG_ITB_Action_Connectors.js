@@ -679,11 +679,11 @@
 
     // Apply Connector Effects
     Game_Action.prototype.applyConnectorEffects = function(target) {
-        const item = this.item();
-        if (!item.connectorEffects) return;
+        const effects = this.connectorEffects();
+        if (!effects) return;
         const subject = this.subject();
         if (DEBUG_CONNECTORS) console.log("Apply Connector Effects");
-        for (const effect of item.connectorEffects) {
+        for (const effect of effects) {
             let battler = null;
             if (effect.target === "self") {
                 battler = subject;
@@ -839,6 +839,11 @@
         // already condition object
         if (typeof conn === "object") return conn;
         return {};
+    };
+
+    Game_Action.prototype.connectorEffects = function() {
+        var item = this.item();
+        return item ? item.connectorEffects : null;
     };
 
     //=============================================================================
