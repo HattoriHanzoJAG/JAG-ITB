@@ -406,6 +406,20 @@
     };
 
     //=========================================================================
+    // Window_ActorCommand
+    //=========================================================================
+
+    var CES_WAC_togglePreviewWindow = Window_ActorCommand.prototype.togglePreviewWindow;
+    Window_ActorCommand.prototype.togglePreviewWindow = function() {
+        CES_WAC_togglePreviewWindow.call(this);
+        var scene = SceneManager._scene;
+        var targetWindow = scene && scene._itbTargetConnectorWindow;
+        if (targetWindow) {
+            targetWindow.setPreviewVisible($gameSystem.isITBPreviewVisible());
+        }
+    };
+
+    //=========================================================================
     // Window_ConnectorEffectSelector
     //=========================================================================
 
@@ -877,8 +891,16 @@
     var CES_WP_drawConnectorEffects = Window_Preview.prototype.drawConnectorEffects;
     Window_Preview.prototype.drawConnectorEffects = function(y) {
         var scene = SceneManager._scene;
-        if (scene instanceof Scene_Battle && scene.clearConnectorEffectTracks) {
-            scene.clearConnectorEffectTracks(this);
+        if (scene instanceof Scene_Battle) {
+            if (scene.clearConnectorEffectTracks) scene.clearConnectorEffectTracks(this);
+            var targetEffects = [];
+            if (this._item && this._item.connectorEffects) {
+                targetEffects = this._item.connectorEffects.filter(function(effect) {
+                    return effect.target === "target" && effect.selectable;
+                });
+            }
+            var targetWindow = scene._itbTargetConnectorWindow;
+            if (targetWindow) targetWindow.setConnectorEffectPreview(targetEffects);
         }
         CES_WP_drawConnectorEffects.call(this, y);
     };
@@ -897,11 +919,21 @@
     //=========================================================================
 
     //--------------------------------------------------------------------------
+    // Initialize
+    //--------------------------------------------------------------------------
+    
+    var CES_WITBTC_initialize = Window_ITBTargetConnectors.prototype.initialize;
+    Window_ITBTargetConnectors.prototype.initialize = function() {
+        this._previewVisible = $gameSystem.isITBPreviewVisible();
+        CES_WITBTC_initialize.call(this);
+    };
+
+    //--------------------------------------------------------------------------
     // Supply effect
     //--------------------------------------------------------------------------
 
-    Window_ITBTargetConnectors.prototype.setConnectorEffectPreview = function(effect) {
-        this._connectorEffectPreview = effect || null;
+    Window_ITBTargetConnectors.prototype.setConnectorEffectPreview = function(effects) {
+        this._connectorEffectPreviews = effects || [];
         this.refresh();
     };
 
@@ -912,8 +944,9 @@
     var CES_WITBTC_resizeForConnectorCount = Window_ITBTargetConnectors.prototype.resizeForConnectorCount;
     Window_ITBTargetConnectors.prototype.resizeForConnectorCount = function() {
         CES_WITBTC_resizeForConnectorCount.call(this);
-        if (this._connectorEffectPreview) {
-            this.height += 32;
+        var effects = this._connectorEffectPreviews || [];
+        if (effects.length > 0) {
+            if (!this._previewVisible) this.height += effects.length * (this.lineHeight() + 4);
             this.createContents();
         }
     };
@@ -928,11 +961,22 @@
         if (scene instanceof Scene_Battle && scene.clearConnectorEffectTracks) {
             scene.clearConnectorEffectTracks(this);
         }
-        var effect = this._connectorEffectPreview;
-        if (effect && effect.selectable) {
-            this.drawConnectorEffect(effect, x, y);
-            this.drawConnectorEffectTrack(effect, x + 104, y + this.lineHeight() - 24, 110);
-            y += 32;
+        if (!this._previewVisible) {
+            var effects = this._connectorEffectPreviews || [];
+            var spacing = this.targetConnectorSpacing();
+            var trackX = x + spacing + 100;
+            var trackWidth = 110;
+            var rowHeight = this.lineHeight() + 4;
+            effects.forEach(function(effect) {
+                this.drawConnectorEffect(effect, x, y, rowHeight);
+                this.drawConnectorEffectTrack(
+                    effect,
+                    trackX,
+                    y + this.lineHeight() - 24,
+                    trackWidth
+                );
+                y += rowHeight;
+            }, this);
         }
         CES_WITBTC_drawTargetConnectors.call(this, x, y);
     };
@@ -944,10 +988,11 @@
     Window_ITBTargetConnectors.prototype.drawConnectorEffect = function(effect, x, y) {
         var definition = DataManager.getConnectorDefinition(effect.connector);
         if (!definition) return;
-        var iconSize = 28;
-        var spacing = 8;
+        var iconSize = this.targetConnectorIconSize();
+        var spacing = this.targetConnectorSpacing();
         var image = BattleManager.ITB_UI.getDisciplineImage(definition.discipline);
-        this.drawSystemImage(image, x, y + 2, iconSize);
+        //var iconY = y + (this.lineHeight + 4) / 2;
+        this.drawSystemImage(image, x + iconSize + spacing, y + 6, iconSize);
         var value = Number(this.connectorEffectDisplayValue(effect));
         var text = (value > 0 ? "+" : "") + String(value);
         this.contents.fontSize = 20;
@@ -956,8 +1001,28 @@
             value < 0 ? this.textColor(18) :
             this.normalColor()
         );
-        this.drawText(text, x + iconSize + spacing, y, 60, "left");
+        this.drawText(text, x + 2 * iconSize + 4, y, 60, "left");
         this.resetFontSettings();
     };
+
+    //--------------------------------------------------------------------------
+    // Keep the visibility setter
+    //--------------------------------------------------------------------------
+
+    Window_ITBTargetConnectors.prototype.setPreviewVisible = function(visible) {
+        if (this._previewVisible === visible) return;
+        this._previewVisible = visible;
+        this.refresh();
+    };
+
+    /* var CES_SB_setPreviewWindowVisible = Scene_Battle.prototype.setPreviewWindowVisible;
+    Scene_Battle.prototype.setPreviewWindowVisible = function(visible) {
+        console.log("CES: setPreviewWindowVisible wrapper", visible);
+        CES_SB_setPreviewWindowVisible.call(this, visible);
+        if (this._previewWindow && visible) {
+            var preview = this._previewWindow;
+            if (preview._data) preview.setAction(preview._actor, preview._item, preview._data);
+        };
+    }; */
 
 })();

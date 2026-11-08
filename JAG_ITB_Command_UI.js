@@ -2285,10 +2285,11 @@
         // if (!visible) return;
         var scene = SceneManager._scene;
         if (!scene) return;
-        console.log("Actor", BattleManager.actor());
         if (sprite && sprite._uiData.region === "actions") {
             scene.updatePreviewWindow(BattleManager.actor(), sprite._uiData.action);
         } else {
+            // Temporary loss of action selection: hide, but retain the data.
+            //scene.setPreviewWindowVisible(false);
             scene.updatePreviewWindow(null, null);
         }
     };
@@ -2968,7 +2969,6 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.setAction = function(actor, item, actionData) {
-        console.log("Set action");
         //if (this._actor === actor && this._item === item) return;
         this._actor = actor;
         this._item = item;
@@ -2981,6 +2981,8 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.clear = function() {
+        console.log("PREVIEW CLEAR CALLED");
+        console.log(new Error().stack);
         this.setAction(null, null, null);
     };
 
@@ -2989,7 +2991,6 @@
     //--------------------------------------------------------------------------
 
     Window_Preview.prototype.refresh = function() {
-        console.log("Refresh preview window");
         var action = this._data;
         if (!action) return;
         var reason = BattleManager.ITB_UI.getActionUnavailableReason(this._actor, action);
@@ -4026,6 +4027,7 @@
     };
 
     Window_Preview.prototype.drawConnectorEffect = function(effect, x, y) {
+        console.log("Draw connector effect");
         var definition = DataManager.getConnectorDefinition(effect.connector);
         if (!definition) return;
         var iconSize = 28;
@@ -4340,7 +4342,11 @@
                 ? this._header.validityCheck
                 : this._header.validityCross;
             var sprite = SceneManager._scene._actorCommandWindow.currentSelectionSprite();
-            this._header.check.visible = sprite && sprite._queueMarker.visible;
+            this._header.check.visible = !!(
+                sprite &&
+                sprite._queueMarker &&
+                sprite._queueMarker.visible
+            );
             this._header.arrow.bitmap = ImageManager.loadSystem("cursor");
             this._header.arrow.scale.x = 0.5;
             this._header.arrow.scale.y = 0.5;
@@ -5911,9 +5917,8 @@
 
     Scene_Battle.prototype.updatePreviewWindow = function(actor, actionData) {
         if (!this._previewWindow) return;
-        console.log("Update preview window");
         if (!actionData) {
-            this._previewWindow.clear();
+            if (this._previewWindow._data) this._previewWindow.refresh();
             this._previewWindow.hide();
             if (this._previewWindow._typeWindow) {
                 this._previewWindow._typeWindow.hide();
@@ -5933,7 +5938,6 @@
                 this._previewWindow._typeWindow.hide();
             }
         }
-        //this._previewWindow.show();
     };
 
     //--------------------------------------------------------------------------
