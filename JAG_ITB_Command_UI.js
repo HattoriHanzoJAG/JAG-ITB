@@ -303,29 +303,10 @@
     };
 
     BattleManager.ITB_UI.isActionUnavailable = function(data) {
-        //console.log("Is action unavailable");
-        //if (data) console.log("Region:", data.region);
-        //if (data && data.region === "actions") console.log("Action:", data.action);
-        if (!data || data.region !== "actions" || !data.action) {
-            return false;
-        }
+        if (!data || data.region !== "actions" || !data.action) return false;
         var actor = BattleManager.actor();
         if (!actor) return true;
         return !!this.getActionUnavailableReason(actor, data.action);
-        /* var item = this.actionObject(data);
-        if (item && !this.isActionUsable(actor, item)) return true;
-        if (actor && actor.queueLength() >= actor.maxQueuedActions()) {
-            //console.log("Max queue length reached");
-            return true;
-        } */
-        //console.log("Connector state validation:", this.isConnectorStateValid(data.action));
-        /* console.log(
-            "ACTION AVAILABILITY:",
-            item ? item.name : null,
-            this.isConnectorStateValid(data.action),
-            this.getConnectorValidation(item)
-        ); */
-        //return !this.isConnectorStateValid(data.action);
     };
 
     BattleManager.ITB_UI.isActionScopeCompatible = function(actor, item, target) {

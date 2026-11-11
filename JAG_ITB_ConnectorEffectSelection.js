@@ -68,6 +68,22 @@
         DataManager.processConnectorEffectsNotetags($dataItems);
     };
 
+    //--------------------------------------------------------------------------
+    // Unlock after undo
+    //--------------------------------------------------------------------------
+
+    var SEC_BM_selectPreviousCommand = BattleManager.selectPreviousCommand;
+    BattleManager.selectPreviousCommand = function() {
+        var actor = this._actor || BattleManager.actor();
+        SEC_BM_selectPreviousCommand.call(this);
+        if (actor && actor.queueLength() < actor.maxQueuedActions()) {
+            var scene = SceneManager._scene;
+            if (scene && scene.unlockConnectorEffectSelection) {
+                scene.unlockConnectorEffectSelection();
+            }
+        }
+    };
+
     //==========================================================================
     // Game_Action
     //==========================================================================
@@ -135,17 +151,6 @@
     };
 
     Scene_Battle.prototype.updateConnectorEffectSelector = function() {
-        /* var track = this.connectorEffectTrackAtPointer();
-        if (!track) {
-            this.clearConnectorEffectSelector();
-            return;
-        }
-        this.setConnectorEffectSelector(
-            track.effect,
-            track.hostWindow,
-            track.x,
-            track.y
-        ); */
         var selector = this._connectorEffectSelectorWindow;
         if (!selector) return;
         if (this._connectorEffectSelectionLocked) {
@@ -155,7 +160,8 @@
             return;
         }
         var tracks = (this._connectorEffectTracks || []).filter(function(track) {
-            return track.hostWindow && track.hostWindow.visible;
+            var win = track.hostWindow
+            return win && win.visible && win.isConnectorEffectTrackAvailable(win);
         });
         selector.setTracks(tracks);
         if (tracks.length > 0) {
@@ -380,22 +386,6 @@
     };
 
     //--------------------------------------------------------------------------
-    // Unlock after undo
-    //--------------------------------------------------------------------------
-
-    var SEC_BM_selectPreviousCommand = BattleManager.selectPreviousCommand;
-    BattleManager.selectPreviousCommand = function() {
-        var actor = this._actor || BattleManager.actor();
-        SEC_BM_selectPreviousCommand.call(this);
-        if (actor && actor.queueLength() < actor.maxQueuedActions()) {
-            var scene = SceneManager._scene;
-            if (scene && scene.unlockConnectorEffectSelection) {
-                scene.unlockConnectorEffectSelection();
-            }
-        }
-    };
-
-    //--------------------------------------------------------------------------
     // Unlock after finishing action queue
     //--------------------------------------------------------------------------
 
@@ -614,11 +604,15 @@
     //--------------------------------------------------------------------------
 
     Window_ConnectorEffectSelector.prototype.setValue = function(value) {
-        var scene = SceneManager._scene;
-        if (scene instanceof Scene_Battle && scene._connectorEffectSelectionLocked) {
-            return;
-        } 
         if (!this._effect) return;
+        var scene = SceneManager._scene;
+        if (scene instanceof Scene_Battle) {
+            if (scene._connectorEffectSelectionLocked) return;
+            // Resolve the currently selected track and its associated action.
+            var track = this._tracks[this.index()];
+            if (!track || track.effect !== this._effect || !track.hostWindow) return;
+            if (!track.hostWindow.isConnectorEffectTrackAvailable(track.hostWindow)) return;
+        }
         var min = Number(this._effect.minChange);
         var max = Number(this._effect.maxChange);
         if (!isFinite(min) || !isFinite(max) || max < min) return;
@@ -861,8 +855,9 @@
 
     Window_Base.prototype.drawConnectorEffectTrack = function(effect, x, y, width) {
         var scene = SceneManager._scene;
-        if (scene instanceof Scene_Battle && scene._connectorEffectSelectionLocked) {
-            return;
+        if (scene instanceof Scene_Battle) {
+            if (scene._connectorEffectSelectionLocked) return;
+            if (!this.isConnectorEffectTrackAvailable(this)) return;
         }
         var min = Number(effect.minChange);
         var max = Number(effect.maxChange);
@@ -878,6 +873,24 @@
         if (scene instanceof Scene_Battle && scene.registerConnectorEffectTrack) {
             scene.registerConnectorEffectTrack(effect, this, x, y, width);
         }
+    };
+
+    //--------------------------------------------------------------------------
+    // Central action-availability check
+    //--------------------------------------------------------------------------
+
+    Window_Base.prototype.isConnectorEffectTrackAvailable = function(hostWindow) {
+        // Resolve the action associated with this track.
+        var actionData = hostWindow instanceof Window_Preview
+            ? hostWindow._data
+            : SceneManager._scene._previewWindow
+            && SceneManager._scene._previewWindow._data;
+        // Fail closed if there is no associated action or it is unavailable.
+        return !!actionData &&
+            !BattleManager.ITB_UI.isActionUnavailable({
+                region: "actions",
+                action: actionData
+            });
     };
 
     //=========================================================================
@@ -945,7 +958,8 @@
     Window_ITBTargetConnectors.prototype.resizeForConnectorCount = function() {
         CES_WITBTC_resizeForConnectorCount.call(this);
         var effects = this._connectorEffectPreviews || [];
-        if (effects.length > 0) {
+         // Only reserve space for effect previews when the action is available.
+        if (this.isConnectorEffectTrackAvailable(this)) {
             if (!this._previewVisible) this.height += effects.length * (this.lineHeight() + 4);
             this.createContents();
         }
@@ -963,20 +977,24 @@
         }
         if (!this._previewVisible) {
             var effects = this._connectorEffectPreviews || [];
-            var spacing = this.targetConnectorSpacing();
-            var trackX = x + spacing + 100;
-            var trackWidth = 110;
-            var rowHeight = this.lineHeight() + 4;
-            effects.forEach(function(effect) {
-                this.drawConnectorEffect(effect, x, y, rowHeight);
-                this.drawConnectorEffectTrack(
-                    effect,
-                    trackX,
-                    y + this.lineHeight() - 24,
-                    trackWidth
-                );
-                y += rowHeight;
-            }, this);
+            if (this.isConnectorEffectTrackAvailable(this)) {
+                var spacing = this.targetConnectorSpacing();
+                var trackX = x + spacing + 100;
+                var trackWidth = 110;
+                var rowHeight = this.lineHeight() + 4;
+                effects.forEach(function(effect) {
+                    this.drawConnectorEffect(effect, x, y, rowHeight);
+                    if (effect.selectable) {
+                        this.drawConnectorEffectTrack(
+                            effect,
+                            trackX,
+                            y + this.lineHeight() - 24,
+                            trackWidth
+                        );
+                    }
+                    y += rowHeight;
+                }, this);
+            }
         }
         CES_WITBTC_drawTargetConnectors.call(this, x, y);
     };
