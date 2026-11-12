@@ -178,6 +178,7 @@
 
     Scene_Battle.prototype.createConnectorEffectSelectorWindow = function() {
         this._connectorEffectSelectionLocked = false;
+        this._previewConnectorEffectsNeedsRefresh = false;
         this._connectorEffectTracks = [];
         this._connectorEffectHostWindows = [];
         this._connectorEffectSelectorWindow = new Window_ConnectorEffectSelector();
@@ -374,10 +375,21 @@
     };
 
     Scene_Battle.prototype.refreshConnectorEffectHostWindows = function() {
+        var previewWindow = this._previewWindow;
         var windows = this._connectorEffectHostWindows || [];
         windows.forEach(function(hostWindow) {
-            if (hostWindow && hostWindow.refresh) hostWindow.refresh();
+            if (
+                hostWindow &&
+                hostWindow !== previewWindow &&
+                hostWindow.refresh
+            ) {
+                hostWindow.refresh();
+            }
         });
+        if (previewWindow) {
+            this._previewConnectorEffectsNeedsRefresh = true;
+            this.refreshPreviewConnectorEffects();
+        }
         /* if (this._previewWindow && this._previewWindow._data) {
             this._previewWindow.refresh();
         }
@@ -393,6 +405,33 @@
     Scene_Battle.prototype.finishActionQueue = function() {
         CES_SB_finishActionQueue.call(this);
         this.unlockConnectorEffectSelection();
+    };
+
+    //--------------------------------------------------------------------------
+    // Preview refresh helper
+    //--------------------------------------------------------------------------
+
+    Scene_Battle.prototype.refreshPreviewConnectorEffects = function() {
+        var previewWindow = this._previewWindow;
+        if (
+            !this._previewConnectorEffectsNeedsRefresh ||
+            !previewWindow ||
+            !previewWindow.visible
+        ) {
+            return;
+        }
+        previewWindow.refresh();
+        this._previewConnectorEffectsNeedsRefresh = false;
+    };
+
+    //--------------------------------------------------------------------------
+    // Refresh when the preview window becomes visible
+    //--------------------------------------------------------------------------
+
+    var CES_SB_setPreviewWindowVisible = Scene_Battle.prototype.setPreviewWindowVisible;
+    Scene_Battle.prototype.setPreviewWindowVisible = function(visible) {
+        CES_SB_setPreviewWindowVisible.call(this, visible);
+        if (visible) this.refreshPreviewConnectorEffects();
     };
 
     //=========================================================================
@@ -927,6 +966,14 @@
         }
     };
 
+    var CES_WP_setAction = Window_Preview.prototype.setAction;
+    Window_Preview.prototype.setAction = function(actor, item, actionData) {
+        CES_WP_setAction.call(this, actor, item, actionData);
+        if (SceneManager._scene instanceof Scene_Battle) {
+            SceneManager._scene._previewConnectorEffectsNeedsRefresh = false;
+        }
+    };
+
     //=========================================================================
     // Window_ITBTargetConnectors
     //=========================================================================
@@ -1032,15 +1079,5 @@
         this._previewVisible = visible;
         this.refresh();
     };
-
-    /* var CES_SB_setPreviewWindowVisible = Scene_Battle.prototype.setPreviewWindowVisible;
-    Scene_Battle.prototype.setPreviewWindowVisible = function(visible) {
-        console.log("CES: setPreviewWindowVisible wrapper", visible);
-        CES_SB_setPreviewWindowVisible.call(this, visible);
-        if (this._previewWindow && visible) {
-            var preview = this._previewWindow;
-            if (preview._data) preview.setAction(preview._actor, preview._item, preview._data);
-        };
-    }; */
 
 })();

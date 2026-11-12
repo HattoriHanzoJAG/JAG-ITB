@@ -474,7 +474,6 @@
     //--------------------------------------------------------------------------
 
     BattleManager.ITB_UI.previewConnectorRows = function(actor, actionData) {
-        console.log("Preview connector rows");
         //console.log("Actor", actor);
         //console.log("Action", actionData);
         if (!actor || !actionData) return [];
@@ -539,7 +538,6 @@
     //--------------------------------------------------------------------------
 
     BattleManager.ITB_UI.buildPreviewConnectorRows = function(state, item) {
-        console.log("Build perview connector rows");
         var rows = [];
         if (!state || !item) return rows;
         //console.log("Disciplines", DataManager.getDisciplines());
@@ -3149,7 +3147,6 @@
     };
 
     Window_Preview.prototype.layoutConnectorRows = function() {
-        console.log("Layout Connector Rows");
         var startY = this.headerY() + this.connectorRowSpacing() + 2;
         //console.log("Y", startY);
         var visibleIndex = 0;
@@ -3252,7 +3249,6 @@
 
     Window_Preview.prototype.buildConnectorLayout = function(rows) {
         //if (!row.displayRange) return null;
-        console.log("Build connector layout");
         var globalLeftDelta = Infinity;
         var globalRightDelta = -Infinity;
         var visibleTracks = false;
@@ -3329,7 +3325,6 @@
     };
 
     Window_Preview.prototype.connectorMarkX = function(state) {
-        console.log("Connector Mark Position");
         //console.log("state", state);
         //console.log("Preview icon x", this._header.previewIcon.x);
         //console.log("Icon width", Window_Base._iconWidth);
@@ -3389,7 +3384,6 @@
     };
 
     Window_Preview.prototype.refreshDamageBadge = function() {
-        console.log("Refresh Damage Badge");
         var badge = this._badges.damage;
         if (!badge) return;
         var info = BattleManager.ITB_UI.actionAttackInfo(this._actor, this._item);
@@ -3405,7 +3399,6 @@
     };
 
     Window_Preview.prototype.refreshCorruptionBadge = function() {
-        console.log("Refresh Corruption Badge");
         var badge = this._badges.corruption;
         if (!badge) return;
         if (this._badges.damage.visible) {
@@ -3426,7 +3419,6 @@
     };
 
     Window_Preview.prototype.refreshDefenseBadge = function() {
-        console.log("Refresh Defense Badge");
         var badge = this._badges.defense;
         if (!badge) return;
         var guard = this._item && this._item.meta && this._item.meta.Guard;
@@ -3440,7 +3432,6 @@
     };
 
     Window_Preview.prototype.refreshDefianceBadge = function() {
-        console.log("Refresh Defiance Badge");
         var badge = this._badges.defiance;
         if (!badge) return;
         if (this._badges.defense.visible) {
@@ -4160,7 +4151,6 @@
 
     Window_Preview.prototype.connectorDisplayRange = function(row) {
         if (row.current === undefined) return null;
-        console.log("Connector display range");
         var min = row.current;
         var max = row.current;
         if (row.output && row.output.mode === "set") {
@@ -4356,7 +4346,6 @@
 
     Window_Preview.prototype.drawHeaderSourceIcon = function(bitmap, source) {
         bitmap.clear();
-        console.log("Draw header source icon");
         if (!source) return;
         //console.log("Source:", source);
         if (source.type === "action") {
@@ -4867,7 +4856,6 @@
         //var startY = this.headerY() + Window_Base._iconHeight + 8;
         //var endY = this.height - this.fittingHeight(1);
         //if (!this._connectorLayout || !this._connectorLayout.visibleTracks) return;
-        console.log("Draw connector axis");
         if (!this._axisSprite || !this._axisSprite.bitmap) return;
         var bitmap = this._axisSprite.bitmap;
         //console.log("Height", bitmap.height);
