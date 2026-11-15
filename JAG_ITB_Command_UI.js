@@ -484,7 +484,7 @@
         var state = this._connectorValidationState;
         //console.log("Connector state", state);
         if (!state) return [];
-        return this.buildPreviewConnectorRows(state, item);
+        return this.buildPreviewConnectorRows(state, item, actor);
     };
 
     //--------------------------------------------------------------------------
@@ -537,7 +537,7 @@
     // Build preview connector list
     //--------------------------------------------------------------------------
 
-    BattleManager.ITB_UI.buildPreviewConnectorRows = function(state, item) {
+    BattleManager.ITB_UI.buildPreviewConnectorRows = function(state, item, actor) {
         var rows = [];
         if (!state || !item) return rows;
         //console.log("Disciplines", DataManager.getDisciplines());
@@ -545,7 +545,8 @@
             var row = BattleManager.ITB_UI.previewConnectorRow(
                 state,
                 item,
-                name
+                name,
+                actor
             );
             //console.log("Row", row);
             if (row) rows.push(row);
@@ -557,7 +558,7 @@
     // Create single preview connector row
     //--------------------------------------------------------------------------
 
-    BattleManager.ITB_UI.previewConnectorRow = function(state, item, discipline) {
+    BattleManager.ITB_UI.previewConnectorRow = function(state, item, discipline, actor) {
         //console.log("Preview connector row:", discipline);
         //console.log("State", state);
         //console.log("Item", item);
@@ -565,7 +566,11 @@
         var outputConnectors = item.outputConnectors || {};
         var input = inputConnectors[discipline];
         var output = outputConnectors[discipline];
-        var current = state[discipline];
+        var definition = DataManager.getConnectorDefinition(discipline);
+        var current = definition && definition.comparison !== undefined
+            ? BattleManager.resolveConnectorValue(discipline, state, actor)
+            : state[discipline];
+        //var current = state[discipline];
         if (current === undefined && !input && !output) return null;
         var validation = BattleManager.ITB_UI.getConnectorValidation(item);
         var connectorValid = validation &&
@@ -616,7 +621,7 @@
             if (!item) continue;
             var action = new Game_Action(actor);
             action.setSkill(item.id);
-            this._connectorValidation[item.id] = action.connectorValidation(state);
+            this._connectorValidation[item.id] = action.connectorValidation(state, actor);
         }
     };
 
@@ -4103,7 +4108,7 @@
             row.trackValues = new Sprite();
             row.trackValues.bitmap = new Bitmap(
                 this.connectorTrackWidth(),
-                this.connectorRowSpacing() + 8
+                this.connectorRowSpacing() + 20
             );
             row.trackValues.visible = false;
             this.addChild(row.trackValues);
@@ -4667,7 +4672,7 @@
         //console.log("Output label", outputLabel);
         //console.log("Axis X-position", axis);
         // Same visual idea as redrawInitiative():
-        var y = Math.floor(bitmap.height * 0.25);
+        var y = Math.floor(bitmap.height * 0.25) - 12;
         bitmap.drawText(
             inputLabel,
             axis - 12,
@@ -4676,6 +4681,13 @@
             bitmap.height,
             "center"
         );
+        var definition = DataManager.getConnectorDefinition(data.discipline);
+        if (definition && definition.comparison !== undefined &&
+                data.current !== undefined) {
+            //bitmap.fontSize = 16;
+            bitmap.textColor = "rgba(237,180,130,1.0)";
+            bitmap.drawText("↔", axis - 12, y + 17, 32, bitmap.height, "center");
+        }
         if (outputLabel !== undefined && outputLabel !== inputLabel) {
             var outputX = this.connectorValueToPixels(outputLabel - inputLabel, span);   
             //console.log("Output X-position", outputX);

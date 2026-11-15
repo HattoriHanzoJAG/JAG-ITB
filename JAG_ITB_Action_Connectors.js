@@ -154,33 +154,6 @@
         }
     };
 
-    /* DataManager.processConnectorEffectsNotetags = function(group) {
-        const regex = /<connectorEffects>([\s\S]*?)<\/connectorEffects>/i;
-        for (const obj of group) {
-            if (!obj || !obj.note) continue;
-            obj.connectorEffects = [];
-            const match = obj.note.match(regex);
-            if (!match) continue;
-            const lines = match[1]
-                .split(/[\r\n]+/)
-                .map(l => l.trim())
-                .filter(Boolean);
-            for (const line of lines) {
-                const parts = line.split(/\s+/);
-                if (parts.length !== 3) continue;
-                const target = parts[0];
-                const connector = parts[1];
-                const value = Number(parts[2]);
-                obj.connectorEffects.push({
-                    target: target,
-                    connector: connector,
-                    value: value
-                });
-            }
-            if (DEBUG_CONNECTORS) console.log(obj.name, obj.connectorEffects);
-        }
-    }; */
-
     DataManager.processConnectorEffectsNotetags = function(group) {
         const regex = /<connectorEffects>([\s\S]*?)<\/connectorEffects>/i;
         const lineRegex = /^(\w+)\s+(\w+)\s+([+-]?\d+(?:\.\d+)?)(?:\s*,\s*([+-]?\d+(?:\.\d+)?))?$/;
@@ -281,6 +254,7 @@
                 disciplineName: "Combat",
                 connector: "offense",
                 connectorName: "Offense",
+                comparison: undefined,
                 attributeName: "Ferocity"
             },
             {
@@ -288,6 +262,7 @@
                 disciplineName: "Diplomacy",
                 connector: "hostility",
                 connectorName: "Hostility",
+                comparison: undefined,
                 attributeName: "Conviction"
             },
             {
@@ -295,6 +270,7 @@
                 disciplineName: "Deception",
                 connector: "concealment",
                 connectorName: "Concealment",
+                comparison: undefined,
                 attributeName: "Guile"
             },
             {
@@ -302,13 +278,15 @@
                 disciplineName: "Sorcery",
                 connector: "expressiveness",
                 connectorName: "Expressiveness",
+                comparison: undefined,
                 attributeName: "Spirituality"
             },
             {
                 discipline: "manoeuvre",
                 disciplineName: "Manoeuvre",
-                connector: "distance",
-                connectorName: "Distance",
+                connector: "position",
+                connectorName: "Position",
+                comparison: "Distance",
                 attributeName: "Vision"
             }
         ];
@@ -335,25 +313,24 @@
     // BattleManager Extensions
     //=============================================================================
 
-    /* BattleManager.currentConnectorState = function(actor) {
-        console.log("Current Connector State")
-        if (actor.queueLength() <= 0) {
-            return actor._selectedTarget.connectorState();
+    BattleManager.resolveConnectorValue = function(discipline, targetState, actor) {
+        if (!targetState) return undefined;
+        var definitions = DataManager.connectorDefinitions();
+        var definition = definitions.find(function(entry) {
+            return entry.discipline === discipline;
+        });
+        if (!definition) return undefined;
+        var targetValue = targetState[definition.discipline];
+        if (actor && definition.comparison !== undefined) {
+            var actorValue = actor.connector(definition.discipline);
+            if (actorValue === undefined || targetValue === undefined) {
+                return targetValue;
+            }
+            return Math.abs(targetValue - actorValue);
         }
-        var last = actor.lastQueuedActionData();
-        return JsonEx.makeDeepCopy(last.resultState);
-    }; */
-
-    /* BattleManager.connectorNames = function() {
-        return [
-            "combat",
-            "sorcery",
-            "deception",
-            "diplomacy",
-            "distance"
-        ];
-    };  
- */
+        return targetValue;
+    };
+    
     BattleManager.connectorValidationState = function(actor, target) {
         // Combo continuation
         if (!actor) return null;
@@ -369,51 +346,6 @@
         }
         return null;
     };
-
-    /* var Connector_BM_selectNextCommand = BattleManager.selectNextCommand;
-    BattleManager.selectNextCommand = function() {
-        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
-            console.log("=== SELECT NEXT COMMAND ===");
-            if (DEBUG_CONNECTORS) console.log(new Error().stack);
-        }
-        var actor = this.actor();
-        if (DEBUG_CONNECTORS) {
-            console.log("actor:", actor ? actor.name() : null);
-            console.log("action:", action);
-            console.log(
-                "STATE",
-                {
-                    queueInput: actor ? actor._queueInputActive : null,
-                    preview: actor ? !!actor._connectorPreviewTarget : null,
-                    queueLength: actor ? actor.queueLength() : null,
-                    phase: this._phase
-                }
-            );
-        }
-        if (DEBUG_CONNECTORS) {
-            console.log(
-                "COMMAND_SELECTION_STATE",
-                actor.queueLength(),
-                actor._connectorPreviewTarget,
-                actor._queueInputActive
-            );
-        }
-        var action = this.inputtingAction();
-        if (!action || !action.item()) return;
-        // -------------------------------------------------
-        // STORE TARGET + RESULT STATE + ACTION QUEUE
-        // -------------------------------------------------
-        SceneManager._scene.queueConnectorAction(actor, action);
-        // Return to queue input mode
-        if (actor && actor._queueInputActive) {
-            SceneManager._scene.returnToCommandInput();
-            return;
-        }
-        // -------------------------------------------------
-        // NORMAL FLOW
-        // -------------------------------------------------
-        Connector_BM_selectNextCommand.call(this);
-    }; */
 
     BattleManager.isConnectorActionScopeCompatible = function(actor, action, target) {
         if (!actor || !action || !target) return true;
@@ -587,7 +519,7 @@
         var correctScope = BattleManager.isConnectorActionScopeCompatible(this, action, target);
         if (target && !correctScope) return null;
         var state = BattleManager.connectorValidationState(this);
-        if (state && !action.canConnectToState(state)) return null;
+        if (state && !action.canConnectToState(state, this)) return null;
         return action;
     };
 
@@ -721,10 +653,7 @@
             case "max":
                 return value <= condition.value;
             case "range":
-                return (
-                    value >= condition.min &&
-                    value <= condition.max
-                );
+                return value >= condition.min && value <= condition.max;
         }
         return false;
     };
@@ -735,66 +664,12 @@
         if (!target) return true;
         var state = target.connectorState();
         if (!state) return true;
-        return this.canConnectToState(state);
+        return this.canConnectToState(state, this.subject());
     };
 
     // Validate Entire State
-    /* Game_Action.prototype.canConnectToState = function(state) {
-        if (TRACE_CONNECTORS || DEBUG_CONNECTORS) {
-            console.log("CAN CONNECT TO STATE");
-            console.log("Skill:", this.item().name);
-            console.log("State:", state);
-        }
-        var skill = this.item();
-        if (!skill) return false;
-        var rawInputs = skill.inputConnectors || {};
-        var inputs = {};
-        Object.keys(rawInputs).forEach(function(key) {
-            inputs[key] = this.normalizeConnector(rawInputs[key]);
-        }, this);
-        if (DEBUG_CONNECTORS) {
-            console.log("Raw inputs:", rawInputs);
-            console.log("Inputs:", inputs);
-        }
-        var rules = state._connectorRules || {};
-        if (DEBUG_CONNECTORS) {
-            console.log("Rules:", rules);
-            console.log("HAS RULES?", !!state._connectorRules, state._connectorRules);
-        }
-        var ruleKeys = Object.keys(rules);
-        for (var i = 0; i < ruleKeys.length; i++) {
-            var name = ruleKeys[i];
-            if (rules[name] !== "strict") continue;
-            if (!inputs[name]) {
-                if (DEBUG_CONNECTORS) console.log("FAILED STRICT CONNECTOR:", name);
-                return false;
-            }
-        }
-        var keys = Object.keys(inputs);
-        for (var i = 0; i < keys.length; i++) {
-            var name = keys[i];
-            var condition = inputs[name];
-            var value = state[name];
-            if (DEBUG_CONNECTORS) {
-                console.log("----------------");
-                console.log("Connector:", name);
-                console.log("Value:", value);
-                console.log("Condition:", condition);
-            }
-            var passed = this.checkConnectorCondition(value, condition);
-            if (DEBUG_CONNECTORS) console.log("PASSED:", passed);
-            if (!passed) {
-                if (DEBUG_CONNECTORS) console.log("FAILED CONNECTOR CHECK:", name);
-                return false;
-            }
-        }
-        if (DEBUG_CONNECTORS) console.log("ALL CONNECTOR CHECKS PASSED");
-        return true;
-    }; */
-
-    // Validate Entire State
-    Game_Action.prototype.canConnectToState = function(state) {
-        var validation = this.connectorValidation(state);
+    Game_Action.prototype.canConnectToState = function(state, actor) {
+        var validation = this.connectorValidation(state, actor);
         var keys = Object.keys(validation);
         for (var i = 0; i < keys.length; i++) {
             if (!validation[keys[i]]) return false;
@@ -803,7 +678,7 @@
     };
 
     // Per connector validation
-    Game_Action.prototype.connectorValidation = function(state) {
+    Game_Action.prototype.connectorValidation = function(state, actor) {
         var skill = this.item();
         if (!skill || !state) return {};
         var inputs = skill.inputConnectors || {};
@@ -821,15 +696,12 @@
         for (var j = 0; j < keys.length; j++) {
             var name = keys[j];
             var condition = inputs[name];
-            var value = state[name];
+            //var value = state[name];
+            var value = BattleManager.resolveConnectorValue(name, state, actor);
             result[name] = this.checkConnectorCondition(value, condition);
         }
         return result;
     };
-
-    //Game_Action.prototype.isValidConnectorSkill = function(state) {
-    //    return this.canConnectToState(state);
-    //};
     
     Game_Action.prototype.normalizeConnector = function(conn) {
         // no connector at all
@@ -1030,7 +902,7 @@
             console.log("queue length BEFORE:", BattleManager.actor().queueLength());
         }
         if (sourceState) {
-            var valid = action.canConnectToState(sourceState);
+            var valid = action.canConnectToState(sourceState, actor);
             if (DEBUG_CONNECTORS) console.log("VALID:", valid);
             if (!valid) {
                 if (DEBUG_CONNECTORS) console.log("INVALID CONNECTOR ACTION -> REJECTED");
@@ -1474,7 +1346,7 @@
         if (actor._connectorPreviewTarget && !correctScope) return false;
         var state = BattleManager.connectorValidationState(actor);
         if (!state) return true;
-        return action.canConnectToState(state);
+        return action.canConnectToState(state, actor);
     };
 
     var Connector_WSL_includes = Window_SkillList.prototype.includes;
@@ -1495,7 +1367,7 @@
         if (actor._connectorPreviewTarget && !correctScope) return false;
         var state = BattleManager.connectorValidationState(actor);
         if (!state) return true;
-        return action.canConnectToState(state);
+        return action.canConnectToState(state, actor);
     };
 
 })();
